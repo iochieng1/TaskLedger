@@ -43,6 +43,9 @@ function load() {
     state.money = parsed.money || { income: 0, target: 0, current: 0 };
     state.theme = parsed.theme || "light";
   } catch {
+    // Saved data exists but isn't valid JSON. Don't overwrite it with demo
+    // data silently — tell the user first, since this discards their tasks.
+    alert("Your saved TaskLedger data couldn't be read and will be reset to the demo state. If this keeps happening, use Export to back up your data first.");
     seedDemo();
   }
 }
