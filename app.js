@@ -366,3 +366,40 @@ function resetData() {
   seedDemo();
   renderAll();
 }
+
+document.addEventListener("DOMContentLoaded", () => {
+  load();
+  setGreeting();
+  renderTimer();
+  renderAll();
+
+  $$(".nav-item").forEach(btn => btn.addEventListener("click", () => switchView(btn.dataset.view)));
+  $("#openTaskBtn").addEventListener("click", () => openDialog());
+  $("#emptyAddBtn").addEventListener("click", () => openDialog());
+  $$(".primary-btn[data-prefill]").forEach(btn => btn.addEventListener("click", () => openDialog(btn.dataset.prefill)));
+
+  $("#themeBtn").addEventListener("click", () => {
+    state.theme = state.theme === "dark" ? "light" : "dark";
+    save();
+    applyTheme();
+  });
+
+  $("#taskFilter").addEventListener("change", renderTasks);
+  $("#taskForm").addEventListener("submit", addTask);
+  $("#closeDialog").addEventListener("click", () => $("#taskDialog").close());
+  $("#cancelDialog").addEventListener("click", () => $("#taskDialog").close());
+
+  $("#moneyForm").addEventListener("submit", (e) => {
+    e.preventDefault();
+    state.money.income = Number($("#incomeInput").value || 0);
+    state.money.target = Number($("#savingsTargetInput").value || 0);
+    state.money.current = Number($("#currentSavingsInput").value || 0);
+    save();
+    renderAll();
+  });
+
+  $("#timerStart").addEventListener("click", startTimer);
+  $("#timerReset").addEventListener("click", resetTimer);
+  $("#exportBtn").addEventListener("click", exportData);
+  $("#resetBtn").addEventListener("click", resetData);
+});
