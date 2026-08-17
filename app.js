@@ -315,3 +315,54 @@ function switchView(view) {
   const titles = { today: "Today", finance: "Money", study: "Study", fitness: "Fitness", insights: "Insights" };
   $("#pageTitle").textContent = titles[view];
 }
+
+let timerSeconds = 25 * 60;
+let timerId = null;
+function renderTimer() {
+  const m = Math.floor(timerSeconds / 60).toString().padStart(2, "0");
+  const s = (timerSeconds % 60).toString().padStart(2, "0");
+  $("#timerDisplay").textContent = `${m}:${s}`;
+}
+function startTimer() {
+  if (timerId) return;
+  $("#timerLabel").textContent = "Focus mode running…";
+  timerId = setInterval(() => {
+    timerSeconds -= 1;
+    renderTimer();
+    if (timerSeconds <= 0) {
+      clearInterval(timerId);
+      timerId = null;
+      state.focusMinutes += 25;
+      save();
+      $("#timerLabel").textContent = "Focus session complete. Nice work.";
+      timerSeconds = 5 * 60;
+      renderTimer();
+      renderDashboard();
+    }
+  }, 1000);
+}
+function resetTimer() {
+  clearInterval(timerId);
+  timerId = null;
+  timerSeconds = 25 * 60;
+  $("#timerLabel").textContent = "Ready when you are.";
+  renderTimer();
+}
+
+function exportData() {
+  const blob = new Blob([JSON.stringify(state, null, 2)], {type: "application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `taskledger-${todayISO()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function resetData() {
+  const ok = confirm("Reset TaskLedger to its demo state?");
+  if (!ok) return;
+  localStorage.removeItem(STORAGE_KEY);
+  seedDemo();
+  renderAll();
+}
