@@ -48,7 +48,7 @@
           <p id="dateText" class="muted"></p>
         </div>
         <div class="top-actions">
-          <button id="themeBtn" class="icon-btn" title="Toggle theme">◐</button>
+          <button id="themeBtn" class="icon-btn" title="Toggle theme" aria-label="Switch to dark mode">◐</button>
           <button id="openTaskBtn" class="primary-btn">+ Add task</button>
         </div>
       </header>
@@ -80,19 +80,19 @@
 
         <div class="stats-grid">
           <article class="stat-card">
-            <span class="stat-icon">✓</span>
+            <span class="stat-icon" aria-hidden="true">✓</span>
             <div><small>Completed</small><strong id="statCompleted">0</strong></div>
           </article>
           <article class="stat-card">
-            <span class="stat-icon">⚡</span>
+            <span class="stat-icon" aria-hidden="true">⚡</span>
             <div><small>Focus minutes</small><strong id="statFocus">0</strong></div>
           </article>
           <article class="stat-card">
-            <span class="stat-icon">₵</span>
+            <span class="stat-icon" aria-hidden="true">₵</span>
             <div><small>Planned spend</small><strong id="statSpend">KES 0</strong></div>
           </article>
           <article class="stat-card">
-            <span class="stat-icon">🔥</span>
+            <span class="stat-icon" aria-hidden="true">🔥</span>
             <div><small>Current streak</small><strong id="statStreak">0 days</strong></div>
           </article>
         </div>
@@ -202,10 +202,10 @@
           <button class="primary-btn" data-prefill="fitness">+ Add workout</button>
         </div>
         <div class="stats-grid">
-          <article class="stat-card"><span class="stat-icon">🏃</span><div><small>Workout minutes</small><strong id="fitnessMinutes">0</strong></div></article>
-          <article class="stat-card"><span class="stat-icon">✓</span><div><small>Completed workouts</small><strong id="fitnessDone">0</strong></div></article>
-          <article class="stat-card"><span class="stat-icon">📅</span><div><small>Planned sessions</small><strong id="fitnessPlanned">0</strong></div></article>
-          <article class="stat-card"><span class="stat-icon">⚡</span><div><small>Average energy</small><strong id="fitnessEnergy">—</strong></div></article>
+          <article class="stat-card"><span class="stat-icon" aria-hidden="true">🏃</span><div><small>Workout minutes</small><strong id="fitnessMinutes">0</strong></div></article>
+          <article class="stat-card"><span class="stat-icon" aria-hidden="true">✓</span><div><small>Completed workouts</small><strong id="fitnessDone">0</strong></div></article>
+          <article class="stat-card"><span class="stat-icon" aria-hidden="true">📅</span><div><small>Planned sessions</small><strong id="fitnessPlanned">0</strong></div></article>
+          <article class="stat-card"><span class="stat-icon" aria-hidden="true">⚡</span><div><small>Average energy</small><strong id="fitnessEnergy">—</strong></div></article>
         </div>
         <article class="panel">
           <div class="panel-head"><h3>Workout queue</h3><span class="tag fitness">Move</span></div>
@@ -254,7 +254,7 @@
     <form id="taskForm" method="dialog">
       <div class="dialog-head">
         <div><p class="eyebrow">New action</p><h2>What needs to happen?</h2></div>
-        <button type="button" class="icon-btn" id="closeDialog">×</button>
+        <button type="button" class="icon-btn" id="closeDialog" aria-label="Close dialog">×</button>
       </div>
       <div class="form-grid">
         <label class="full">Task name<input id="taskTitle" required maxlength="100" placeholder="e.g. Revise JavaScript arrays" /></label>
@@ -296,7 +296,7 @@
   <template id="taskTemplate">
     <article class="task-card">
       <div class="task-check-wrap">
-        <button class="check-btn" title="Complete task">○</button>
+        <button class="check-btn" title="Complete task" aria-label="Mark task complete">○</button>
       </div>
       <div class="task-content">
         <div class="task-top">
@@ -312,7 +312,7 @@
         </div>
       </div>
       <div class="task-actions">
-        <button class="icon-btn delete-task" title="Delete task">⌫</button>
+        <button class="icon-btn delete-task" title="Delete task" aria-label="Delete task">⌫</button>
       </div>
     </article>
   </template>

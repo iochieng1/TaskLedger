@@ -66,7 +66,9 @@ function seedDemo() {
 
 function applyTheme() {
   document.body.classList.toggle("dark", state.theme === "dark");
-  $("#themeBtn").textContent = state.theme === "dark" ? "☀" : "◐";
+  const themeBtn = $("#themeBtn");
+  themeBtn.textContent = state.theme === "dark" ? "☀" : "◐";
+  themeBtn.setAttribute("aria-label", state.theme === "dark" ? "Switch to light mode" : "Switch to dark mode");
 }
 
 function formatDate(dateISO) {
@@ -100,6 +102,7 @@ function renderTaskCard(task, container) {
 
   const checkBtn = card.querySelector(".check-btn");
   checkBtn.textContent = task.completed ? "✓" : "○";
+  checkBtn.setAttribute("aria-label", task.completed ? `Mark "${task.title}" incomplete` : `Mark "${task.title}" complete`);
   checkBtn.addEventListener("click", () => toggleTask(task.id));
 
   card.querySelector(".task-title").textContent = task.title;
@@ -122,7 +125,9 @@ function renderTaskCard(task, container) {
   due.textContent = task.date === today ? "Today" : task.date < today ? "Overdue" : formatDate(task.date);
   if (task.date < today && !task.completed) due.classList.add("overdue");
 
-  card.querySelector(".delete-task").addEventListener("click", () => deleteTask(task.id));
+  const deleteBtn = card.querySelector(".delete-task");
+  deleteBtn.setAttribute("aria-label", `Delete "${task.title}"`);
+  deleteBtn.addEventListener("click", () => deleteTask(task.id));
   container.appendChild(card);
 }
 
