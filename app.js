@@ -89,3 +89,107 @@ function smartSort(a, b) {
   if (Number(a.priority) !== Number(b.priority)) return Number(b.priority) - Number(a.priority);
   return Number(a.minutes) - Number(b.minutes);
 }
+
+function renderTaskCard(task, container) {
+  const template = $("#taskTemplate");
+  const card = template.content.cloneNode(true);
+  const root = card.querySelector(".task-card");
+
+  root.dataset.id = task.id;
+  if (task.completed) root.classList.add("completed");
+
+  const checkBtn = card.querySelector(".check-btn");
+  checkBtn.textContent = task.completed ? "✓" : "○";
+  checkBtn.addEventListener("click", () => toggleTask(task.id));
+
+  card.querySelector(".task-title").textContent = task.title;
+  const tag = card.querySelector(".task-tag");
+  tag.textContent = categoryNames[task.category];
+  tag.classList.add(task.category);
+
+  const dot = card.querySelector(".priority-dot");
+  dot.classList.add(priorityLabel(task.priority).toLowerCase());
+
+  const note = card.querySelector(".task-note");
+  note.textContent = task.note || "";
+  if (!task.note) note.remove();
+
+  card.querySelector(".meta-time").textContent = `⏱ ${task.minutes}m`;
+  card.querySelector(".meta-energy").textContent = `⚡ ${task.energy}`;
+  card.querySelector(".meta-cost").textContent = `₵ ${Number(task.cost || 0).toLocaleString("en-KE")}`;
+  card.querySelector(".meta-due").textContent = task.date === todayISO() ? "Today" : formatDate(task.date);
+
+  card.querySelector(".delete-task").addEventListener("click", () => deleteTask(task.id));
+  container.appendChild(card);
+}
+
+function renderTasks() {
+  const filter = $("#taskFilter").value;
+  const today = todayISO();
+  let tasks = state.tasks.filter(t => t.date === today || !t.completed);
+  if (filter !== "all") tasks = tasks.filter(t => t.category === filter);
+  tasks.sort(smartSort);
+
+  $("#taskList").innerHTML = "";
+  tasks.forEach(t => renderTaskCard(t, $("#taskList")));
+  $("#emptyState").classList.toggle("hidden", tasks.length > 0);
+
+  const lists = [
+    ["#moneyTaskList", "finance"],
+    ["#studyTaskList", "study"],
+    ["#fitnessTaskList", "fitness"]
+  ];
+  for (const [sel, cat] of lists) {
+    const box = $(sel);
+    box.innerHTML = "";
+    state.tasks.filter(t => t.category === cat).sort(smartSort).forEach(t => renderTaskCard(t, box));
+  }
+}
+
+function toggleTask(id) {
+  const task = state.tasks.find(t => t.id === id);
+  if (!task) return;
+  task.completed = !task.completed;
+  task.completedAt = task.completed ? new Date().toISOString() : null;
+  if (task.completed && task.category === "study") state.focusMinutes += Number(task.minutes || 0);
+  save();
+  renderAll();
+}
+
+function deleteTask(id) {
+  state.tasks = state.tasks.filter(t => t.id !== id);
+  save();
+  renderAll();
+}
+
+function openDialog(prefillCategory = null) {
+  $("#taskForm").reset();
+  $("#taskDate").value = todayISO();
+  if (prefillCategory) $("#taskCategory").value = prefillCategory;
+  $("#taskMinutes").value = 30;
+  $("#taskCost").value = 0;
+  $("#taskEnergy").value = "medium";
+  $("#taskDialog").showModal();
+  setTimeout(() => $("#taskTitle").focus(), 0);
+}
+
+function addTask(event) {
+  event.preventDefault();
+  const task = {
+    id: uid(),
+    title: $("#taskTitle").value.trim(),
+    category: $("#taskCategory").value,
+    priority: Number($("#taskPriority").value),
+    date: $("#taskDate").value || todayISO(),
+    minutes: Number($("#taskMinutes").value || 30),
+    cost: Number($("#taskCost").value || 0),
+    energy: $("#taskEnergy").value,
+    note: $("#taskNote").value.trim(),
+    completed: false,
+    completedAt: null
+  };
+  state.tasks.push(task);
+  save();
+  $("#taskDialog").close();
+  renderAll();
+}
