@@ -1,4 +1,7 @@
 const STORAGE_KEY = "taskledger-v1";
+const DAILY_CAPACITY_MINUTES = 360; // six-hour default execution budget
+const FOCUS_SESSION_SECONDS = 25 * 60; // Pomodoro focus block
+const BREAK_SECONDS = 5 * 60; // short break after a focus session
 
 const state = {
   tasks: [],
@@ -213,12 +216,12 @@ function renderDashboard() {
   const done = todayTasks.filter(t => t.completed);
   const plannedMinutes = todayTasks.filter(t => !t.completed).reduce((sum, t) => sum + Number(t.minutes || 0), 0);
   const plannedSpend = todayTasks.filter(t => !t.completed).reduce((sum, t) => sum + Number(t.cost || 0), 0);
-  const capacity = Math.min(100, Math.round((plannedMinutes / 360) * 100));
+  const capacity = Math.min(100, Math.round((plannedMinutes / DAILY_CAPACITY_MINUTES) * 100));
 
-  $("#capacityHeadline").textContent = `${plannedMinutes} / 360 min planned`;
-  $("#capacityText").textContent = plannedMinutes > 360
+  $("#capacityHeadline").textContent = `${plannedMinutes} / ${DAILY_CAPACITY_MINUTES} min planned`;
+  $("#capacityText").textContent = plannedMinutes > DAILY_CAPACITY_MINUTES
     ? "You are over capacity. Move or remove something."
-    : plannedMinutes > 300
+    : plannedMinutes > DAILY_CAPACITY_MINUTES - 60
       ? "Heavy day. Protect the highest-value work."
       : "You have room to take action.";
 
@@ -329,7 +332,7 @@ function switchView(view) {
   $("#pageTitle").textContent = titles[view];
 }
 
-let timerSeconds = 25 * 60;
+let timerSeconds = FOCUS_SESSION_SECONDS;
 let timerId = null;
 function renderTimer() {
   const m = Math.floor(timerSeconds / 60).toString().padStart(2, "0");
@@ -345,10 +348,10 @@ function startTimer() {
     if (timerSeconds <= 0) {
       clearInterval(timerId);
       timerId = null;
-      state.focusMinutes += 25;
+      state.focusMinutes += FOCUS_SESSION_SECONDS / 60;
       save();
       $("#timerLabel").textContent = "Focus session complete. Nice work.";
-      timerSeconds = 5 * 60;
+      timerSeconds = BREAK_SECONDS;
       renderTimer();
       renderDashboard();
     }
@@ -357,7 +360,7 @@ function startTimer() {
 function resetTimer() {
   clearInterval(timerId);
   timerId = null;
-  timerSeconds = 25 * 60;
+  timerSeconds = FOCUS_SESSION_SECONDS;
   $("#timerLabel").textContent = "Ready when you are.";
   renderTimer();
 }
