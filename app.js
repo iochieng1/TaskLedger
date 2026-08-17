@@ -116,7 +116,7 @@ function renderTaskCard(task, container) {
 
   card.querySelector(".meta-time").textContent = `⏱ ${task.minutes}m`;
   card.querySelector(".meta-energy").textContent = `⚡ ${task.energy}`;
-  card.querySelector(".meta-cost").textContent = `₵ ${Number(task.cost || 0).toLocaleString("en-KE")}`;
+  card.querySelector(".meta-cost").textContent = task.cost ? formatKES(task.cost) : "No cost";
   card.querySelector(".meta-due").textContent = task.date === todayISO() ? "Today" : formatDate(task.date);
 
   card.querySelector(".delete-task").addEventListener("click", () => deleteTask(task.id));
