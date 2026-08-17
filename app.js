@@ -193,3 +193,125 @@ function addTask(event) {
   $("#taskDialog").close();
   renderAll();
 }
+
+function renderDashboard() {
+  const today = todayISO();
+  const todayTasks = state.tasks.filter(t => t.date === today);
+  const done = todayTasks.filter(t => t.completed);
+  const plannedMinutes = todayTasks.filter(t => !t.completed).reduce((sum, t) => sum + Number(t.minutes || 0), 0);
+  const plannedSpend = todayTasks.filter(t => !t.completed).reduce((sum, t) => sum + Number(t.cost || 0), 0);
+  const capacity = Math.min(100, Math.round((plannedMinutes / 360) * 100));
+
+  $("#capacityHeadline").textContent = `${plannedMinutes} / 360 min planned`;
+  $("#capacityText").textContent = plannedMinutes > 360
+    ? "You are over capacity. Move or remove something."
+    : plannedMinutes > 300
+      ? "Heavy day. Protect the highest-value work."
+      : "You have room to take action.";
+
+  $("#capacityPercent").textContent = `${capacity}%`;
+  $("#capacityRing").style.background = `conic-gradient(var(--accent) ${capacity * 3.6}deg, var(--surface-2) 0deg)`;
+
+  const savingPct = state.money.target ? Math.min(100, Math.round((state.money.current / state.money.target) * 100)) : 0;
+  $("#savingHeadline").textContent = formatKES(state.money.current);
+  $("#savingText").textContent = state.money.target
+    ? `${formatKES(Math.max(0, state.money.target - state.money.current))} left to hit this month's target.`
+    : "Set a monthly target to give your money a job.";
+  $("#savingBar").style.width = `${savingPct}%`;
+  $("#savingPercent").textContent = `${savingPct}% of target`;
+
+  $("#statCompleted").textContent = done.length;
+  $("#statFocus").textContent = state.focusMinutes;
+  $("#statSpend").textContent = formatKES(plannedSpend);
+  $("#statStreak").textContent = `${calculateStreak()} day${calculateStreak() === 1 ? "" : "s"}`;
+}
+
+function renderFinance() {
+  $("#incomeInput").value = state.money.income || "";
+  $("#savingsTargetInput").value = state.money.target || "";
+  $("#currentSavingsInput").value = state.money.current || "";
+
+  const planned = state.tasks.filter(t => !t.completed).reduce((sum, t) => sum + Number(t.cost || 0), 0);
+  const available = Number(state.money.income || 0) - planned - Number(state.money.target || 0);
+  $("#financeAvailable").textContent = formatKES(available);
+  $("#financeIncome").textContent = formatKES(state.money.income);
+  $("#financePlanned").textContent = formatKES(planned);
+  $("#financeTarget").textContent = formatKES(state.money.target);
+}
+
+function renderStudy() {
+  const study = state.tasks.filter(t => t.category === "study" && !t.completed);
+  const minutes = study.reduce((sum, t) => sum + Number(t.minutes || 0), 0);
+  const done = state.tasks.filter(t => t.category === "study" && t.completed).length;
+  const total = state.tasks.filter(t => t.category === "study").length;
+  const pct = total ? Math.round((done / total) * 100) : 0;
+  $("#studyMinutes").textContent = `${minutes} min`;
+  $("#studyBar").style.width = `${pct}%`;
+  $("#studyCompletion").textContent = `${pct}% completed`;
+}
+
+function renderFitness() {
+  const all = state.tasks.filter(t => t.category === "fitness");
+  const done = all.filter(t => t.completed);
+  const mins = all.reduce((s, t) => s + Number(t.minutes || 0), 0);
+  const avg = all.length ? Math.round(all.reduce((s, t) => s + ({low:1, medium:2, high:3}[t.energy] || 2), 0) / all.length) : 0;
+  $("#fitnessMinutes").textContent = mins;
+  $("#fitnessDone").textContent = done.length;
+  $("#fitnessPlanned").textContent = all.length - done.length;
+  $("#fitnessEnergy").textContent = avg === 3 ? "High" : avg === 2 ? "Medium" : avg === 1 ? "Low" : "—";
+}
+
+function calculateStreak() {
+  const days = new Set(state.tasks.filter(t => t.completedAt).map(t => t.completedAt.slice(0, 10)));
+  let cursor = new Date(`${todayISO()}T00:00:00`);
+  let streak = 0;
+  while (days.has(cursor.toISOString().slice(0, 10))) {
+    streak += 1;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return streak;
+}
+
+function renderInsights() {
+  const all = state.tasks;
+  const done = all.filter(t => t.completed);
+  const completion = all.length ? done.length / all.length : 0;
+  const highDone = all.length ? done.filter(t => Number(t.priority) === 3).length / Math.max(1, all.filter(t => Number(t.priority) === 3).length) : 0;
+  const streak = calculateStreak();
+  const score = Math.min(100, Math.round((completion * 65) + (Math.min(streak, 7) / 7 * 20) + (highDone * 15)));
+  $("#executionScore").textContent = score;
+
+  const cats = ["study","finance","fitness","work","personal"].map(cat => {
+    const rows = all.filter(t => t.category === cat);
+    const pct = rows.length ? rows.filter(t => t.completed).length / rows.length : 0;
+    return { cat, pct, count: rows.length };
+  }).filter(x => x.count).sort((a,b) => b.pct - a.pct);
+  $("#bestCategory").textContent = cats.length ? categoryNames[cats[0].cat] : "—";
+
+  const planned = all.filter(t => !t.completed).reduce((s, t) => s + Number(t.minutes || 0), 0);
+  const spend = all.filter(t => !t.completed).reduce((s, t) => s + Number(t.cost || 0), 0);
+  let insight = "Add more tasks and complete a few to unlock stronger feedback.";
+  if (planned > 360) insight = `You have ${planned - 360} minutes over a six-hour execution capacity. Reduce the queue before adding more.`;
+  else if (spend > (state.money.income || Infinity) * 0.2 && state.money.income) insight = `Planned task spending is ${formatKES(spend)}. Check whether all costs support your current priorities.`;
+  else if (streak >= 3) insight = `${streak}-day execution streak. Protect the routine rather than chasing a perfect plan.`;
+  else if (completion >= .7) insight = "Your completion rate is strong. The next upgrade is improving task quality and effort estimates.";
+  $("#realityCheck").textContent = insight;
+}
+
+function renderAll() {
+  renderTasks();
+  renderDashboard();
+  renderFinance();
+  renderStudy();
+  renderFitness();
+  renderInsights();
+  applyTheme();
+}
+
+function switchView(view) {
+  $$(".view").forEach(v => v.classList.remove("active-view"));
+  $(`#${view}View`).classList.add("active-view");
+  $$(".nav-item").forEach(btn => btn.classList.toggle("active", btn.dataset.view === view));
+  const titles = { today: "Today", finance: "Money", study: "Study", fitness: "Fitness", insights: "Insights" };
+  $("#pageTitle").textContent = titles[view];
+}
