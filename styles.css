@@ -116,6 +116,7 @@ p { margin: 0; }
 .task-title { font-size: 15px; letter-spacing: -.02em; }
 .task-note { color: var(--muted); font-size: 12px; margin-top: 5px; line-height: 1.5; }
 .task-meta { display: flex; gap: 11px; flex-wrap: wrap; margin-top: 9px; color: var(--muted); font-size: 11px; }
+.meta-due.overdue { color: var(--danger, #dc2626); font-weight: 600; }
 .priority-dot { width: 9px; height: 9px; border-radius: 50%; background: #bdc8d7; flex: 0 0 auto; margin-top: 4px; }
 .priority-dot.high { background: var(--red); }
 .priority-dot.medium { background: var(--yellow); }

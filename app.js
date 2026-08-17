@@ -117,7 +117,10 @@ function renderTaskCard(task, container) {
   card.querySelector(".meta-time").textContent = `⏱ ${task.minutes}m`;
   card.querySelector(".meta-energy").textContent = `⚡ ${task.energy}`;
   card.querySelector(".meta-cost").textContent = task.cost ? formatKES(task.cost) : "No cost";
-  card.querySelector(".meta-due").textContent = task.date === todayISO() ? "Today" : formatDate(task.date);
+  const due = card.querySelector(".meta-due");
+  const today = todayISO();
+  due.textContent = task.date === today ? "Today" : task.date < today ? "Overdue" : formatDate(task.date);
+  if (task.date < today && !task.completed) due.classList.add("overdue");
 
   card.querySelector(".delete-task").addEventListener("click", () => deleteTask(task.id));
   container.appendChild(card);
@@ -126,7 +129,9 @@ function renderTaskCard(task, container) {
 function renderTasks() {
   const filter = $("#taskFilter").value;
   const today = todayISO();
-  let tasks = state.tasks.filter(t => t.date === today || !t.completed);
+  // "Today" means due today or overdue — future-dated tasks belong to their
+  // own day and shouldn't clutter today's queue.
+  let tasks = state.tasks.filter(t => t.date <= today);
   if (filter !== "all") tasks = tasks.filter(t => t.category === filter);
   tasks.sort(smartSort);
 
