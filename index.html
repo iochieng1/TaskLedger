@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="TaskLedger — a task manager that connects your time, money, study and fitness." />
+  <meta name="theme-color" content="#0f172a" />
+  <title>TaskLedger — Plan. Execute. Build.</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">TL</div>
+        <div>
+          <strong>TaskLedger</strong>
+          <span>Plan. Execute. Build.</span>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <button class="nav-item active" data-view="today"><span>◷</span> Today</button>
+        <button class="nav-item" data-view="finance"><span>₵</span> Money</button>
+        <button class="nav-item" data-view="study"><span>⌘</span> Study</button>
+        <button class="nav-item" data-view="fitness"><span>↗</span> Fitness</button>
+        <button class="nav-item" data-view="insights"><span>◉</span> Insights</button>
+      </nav>
+
+      <div class="sidebar-card">
+        <p class="eyebrow">Your edge</p>
+        <h3>Tasks should fit your life — not fight it.</h3>
+        <p>Track effort, cash impact and energy in the same place.</p>
+      </div>
+
+      <button id="exportBtn" class="sidebar-action">Export my data</button>
+      <button id="resetBtn" class="sidebar-action danger">Reset demo data</button>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <p id="greeting" class="eyebrow">Good morning</p>
+          <h1 id="pageTitle">Today</h1>
+          <p id="dateText" class="muted"></p>
+        </div>
+        <div class="top-actions">
+          <button id="themeBtn" class="icon-btn" title="Toggle theme">◐</button>
+          <button id="openTaskBtn" class="primary-btn">+ Add task</button>
+        </div>
+      </header>
+
+      <section id="todayView" class="view active-view">
+        <div class="hero-grid">
+          <article class="hero-card">
+            <div>
+              <p class="eyebrow">Daily capacity</p>
+              <h2 id="capacityHeadline">0 / 360 min planned</h2>
+              <p class="muted" id="capacityText">You have room to take action.</p>
+            </div>
+            <div class="progress-ring" id="capacityRing">
+              <span id="capacityPercent">0%</span>
+            </div>
+          </article>
+          <article class="hero-card">
+            <div>
+              <p class="eyebrow">Savings mission</p>
+              <h2 id="savingHeadline">KES 0</h2>
+              <p class="muted" id="savingText">Set a monthly target to give your money a job.</p>
+            </div>
+            <div class="goal-mini">
+              <div class="goal-track"><span id="savingBar"></span></div>
+              <small id="savingPercent">0%</small>
+            </div>
+          </article>
+        </div>
+
+        <div class="stats-grid">
+          <article class="stat-card">
+            <span class="stat-icon">✓</span>
+            <div><small>Completed</small><strong id="statCompleted">0</strong></div>
+          </article>
+          <article class="stat-card">
+            <span class="stat-icon">⚡</span>
+            <div><small>Focus minutes</small><strong id="statFocus">0</strong></div>
+          </article>
+          <article class="stat-card">
+            <span class="stat-icon">₵</span>
+            <div><small>Planned spend</small><strong id="statSpend">KES 0</strong></div>
+          </article>
+          <article class="stat-card">
+            <span class="stat-icon">🔥</span>
+            <div><small>Current streak</small><strong id="statStreak">0 days</strong></div>
+          </article>
+        </div>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Smart queue</p>
+              <h2>Your next best actions</h2>
+            </div>
+            <select id="taskFilter" class="select">
+              <option value="all">All categories</option>
+              <option value="study">Study</option>
+              <option value="finance">Money</option>
+              <option value="fitness">Fitness</option>
+              <option value="work">Work</option>
+              <option value="personal">Personal</option>
+            </select>
+          </div>
+          <div id="taskList" class="task-list"></div>
+          <div id="emptyState" class="empty-state hidden">
+            <div class="empty-icon">✓</div>
+            <h3>Nothing urgent is left.</h3>
+            <p>Add a task or enjoy the breathing room.</p>
+            <button class="secondary-btn" id="emptyAddBtn">Create a task</button>
+          </div>
+        </section>
+      </section>
+
+      <section id="financeView" class="view">
+        <div class="section-title">
+          <div>
+            <p class="eyebrow">Money</p>
+            <h2>Turn financial goals into actions.</h2>
+            <p class="muted">Your task list should know when a task costs money — and when it helps you save it.</p>
+          </div>
+        </div>
+        <div class="two-col">
+          <article class="panel">
+            <div class="panel-head">
+              <div><h3>Monthly money plan</h3><p class="muted">Used locally in your browser.</p></div>
+            </div>
+            <form id="moneyForm" class="form-grid">
+              <label>Monthly income<input id="incomeInput" type="number" min="0" step="50" placeholder="e.g. 30000" /></label>
+              <label>Savings target<input id="savingsTargetInput" type="number" min="0" step="50" placeholder="e.g. 5000" /></label>
+              <label>Current savings<input id="currentSavingsInput" type="number" min="0" step="50" placeholder="e.g. 1200" /></label>
+              <div class="full"><button class="primary-btn" type="submit">Save money plan</button></div>
+            </form>
+          </article>
+          <article class="panel finance-summary">
+            <p class="eyebrow">This month</p>
+            <div class="money-number" id="financeAvailable">KES 0</div>
+            <p class="muted">Available after planned task spending and savings target.</p>
+            <div class="money-breakdown">
+              <span><b id="financeIncome">KES 0</b><small>Income</small></span>
+              <span><b id="financePlanned">KES 0</b><small>Task costs</small></span>
+              <span><b id="financeTarget">KES 0</b><small>Target savings</small></span>
+            </div>
+          </article>
+        </div>
+        <article class="panel">
+          <div class="panel-head"><div><p class="eyebrow">Money-aware tasks</p><h3>Where your cash is going</h3></div></div>
+          <div id="moneyTaskList" class="task-list"></div>
+        </article>
+      </section>
+
+      <section id="studyView" class="view">
+        <div class="section-title">
+          <div>
+            <p class="eyebrow">Study</p>
+            <h2>Study by output, not just hours.</h2>
+            <p class="muted">Turn assignments and revision into small, scheduled actions.</p>
+          </div>
+          <button class="primary-btn" data-prefill="study">+ Add study task</button>
+        </div>
+        <div class="study-grid">
+          <article class="panel focus-card">
+            <p class="eyebrow">Focus timer</p>
+            <div id="timerDisplay" class="timer-display">25:00</div>
+            <div class="timer-label" id="timerLabel">Ready when you are.</div>
+            <div class="timer-controls">
+              <button class="primary-btn" id="timerStart">Start focus</button>
+              <button class="secondary-btn" id="timerReset">Reset</button>
+            </div>
+          </article>
+          <article class="panel">
+            <p class="eyebrow">Study workload</p>
+            <div class="big-stat" id="studyMinutes">0 min</div>
+            <p class="muted">planned study time remaining today.</p>
+            <div class="goal-track large"><span id="studyBar"></span></div>
+            <p class="muted small" id="studyCompletion">0% completed</p>
+          </article>
+        </div>
+        <article class="panel">
+          <div class="panel-head"><h3>Study queue</h3><span class="tag study">Learning mode</span></div>
+          <div id="studyTaskList" class="task-list"></div>
+        </article>
+      </section>
+
+      <section id="fitnessView" class="view">
+        <div class="section-title">
+          <div>
+            <p class="eyebrow">Fitness</p>
+            <h2>Make movement another executable task.</h2>
+            <p class="muted">No complicated gym system — just track the work you said you would do.</p>
+          </div>
+          <button class="primary-btn" data-prefill="fitness">+ Add workout</button>
+        </div>
+        <div class="stats-grid">
+          <article class="stat-card"><span class="stat-icon">🏃</span><div><small>Workout minutes</small><strong id="fitnessMinutes">0</strong></div></article>
+          <article class="stat-card"><span class="stat-icon">✓</span><div><small>Completed workouts</small><strong id="fitnessDone">0</strong></div></article>
+          <article class="stat-card"><span class="stat-icon">📅</span><div><small>Planned sessions</small><strong id="fitnessPlanned">0</strong></div></article>
+          <article class="stat-card"><span class="stat-icon">⚡</span><div><small>Average energy</small><strong id="fitnessEnergy">—</strong></div></article>
+        </div>
+        <article class="panel">
+          <div class="panel-head"><h3>Workout queue</h3><span class="tag fitness">Move</span></div>
+          <div id="fitnessTaskList" class="task-list"></div>
+        </article>
+      </section>
+
+      <section id="insightsView" class="view">
+        <div class="section-title">
+          <div>
+            <p class="eyebrow">Insights</p>
+            <h2>See the life behind the checklist.</h2>
+            <p class="muted">TaskLedger converts small actions into useful patterns.</p>
+          </div>
+        </div>
+        <div class="insight-grid">
+          <article class="panel">
+            <p class="eyebrow">Execution score</p>
+            <div class="score" id="executionScore">0</div>
+            <p class="muted">Based on completion, priority and consistency.</p>
+          </article>
+          <article class="panel">
+            <p class="eyebrow">Best category</p>
+            <div class="score-text" id="bestCategory">—</div>
+            <p class="muted">Where you are most consistent.</p>
+          </article>
+          <article class="panel">
+            <p class="eyebrow">Reality check</p>
+            <div class="insight-copy" id="realityCheck">Add tasks to get a useful recommendation.</div>
+          </article>
+        </div>
+        <article class="panel">
+          <div class="panel-head"><div><p class="eyebrow">What makes this different</p><h3>Beyond the checklist</h3></div></div>
+          <div class="feature-grid">
+            <div><b>Time-aware</b><span>Every task carries an estimated effort, so your day has a capacity limit.</span></div>
+            <div><b>Money-aware</b><span>Tasks can carry a KES cost, exposing the financial impact of your plans.</span></div>
+            <div><b>Energy-aware</b><span>Match hard tasks with high-energy windows instead of pretending all minutes are equal.</span></div>
+            <div><b>Outcome-aware</b><span>Study and fitness are treated as actions with measurable progress, not separate apps.</span></div>
+          </div>
+        </article>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="taskDialog" class="dialog">
+    <form id="taskForm" method="dialog">
+      <div class="dialog-head">
+        <div><p class="eyebrow">New action</p><h2>What needs to happen?</h2></div>
+        <button type="button" class="icon-btn" id="closeDialog">×</button>
+      </div>
+      <div class="form-grid">
+        <label class="full">Task name<input id="taskTitle" required maxlength="100" placeholder="e.g. Revise JavaScript arrays" /></label>
+        <label>Category
+          <select id="taskCategory">
+            <option value="study">Study</option>
+            <option value="finance">Money</option>
+            <option value="fitness">Fitness</option>
+            <option value="work">Work</option>
+            <option value="personal">Personal</option>
+          </select>
+        </label>
+        <label>Priority
+          <select id="taskPriority">
+            <option value="3">High</option>
+            <option value="2" selected>Medium</option>
+            <option value="1">Low</option>
+          </select>
+        </label>
+        <label>Due date<input id="taskDate" type="date" required /></label>
+        <label>Estimated minutes<input id="taskMinutes" type="number" min="5" max="720" step="5" value="30" /></label>
+        <label>Cost (KES)<input id="taskCost" type="number" min="0" step="10" value="0" /></label>
+        <label>Energy
+          <select id="taskEnergy">
+            <option value="low">Low</option>
+            <option value="medium" selected>Medium</option>
+            <option value="high">High</option>
+          </select>
+        </label>
+        <label class="full"><span>Why this matters</span><textarea id="taskNote" rows="3" maxlength="240" placeholder="Optional context or outcome"></textarea></label>
+      </div>
+      <div class="dialog-actions">
+        <button type="button" class="secondary-btn" id="cancelDialog">Cancel</button>
+        <button type="submit" class="primary-btn">Add task</button>
+      </div>
+    </form>
+  </dialog>
+
+  <template id="taskTemplate">
+    <article class="task-card">
+      <div class="task-check-wrap">
+        <button class="check-btn" title="Complete task">○</button>
+      </div>
+      <div class="task-content">
+        <div class="task-top">
+          <div class="task-title-wrap"><h3 class="task-title"></h3><span class="tag task-tag"></span></div>
+          <span class="priority-dot"></span>
+        </div>
+        <p class="task-note"></p>
+        <div class="task-meta">
+          <span class="meta-time"></span>
+          <span class="meta-energy"></span>
+          <span class="meta-cost"></span>
+          <span class="meta-due"></span>
+        </div>
+      </div>
+      <div class="task-actions">
+        <button class="icon-btn delete-task" title="Delete task">⌫</button>
+      </div>
+    </article>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>
