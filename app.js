@@ -253,6 +253,30 @@ function renderDashboard() {
   $("#statStreak").textContent = `${calculateStreak()} day${calculateStreak() === 1 ? "" : "s"}`;
 }
 
+function renderBalance() {
+  const allTasks = state.tasks;
+  const totalTasks = allTasks.length || 1;
+  const completedRatio = allTasks.filter(t => t.completed).length / totalTasks;
+  const activeToday = allTasks.filter(t => t.date === todayISO() && !t.completed);
+  const plannedMinutes = activeToday.reduce((sum, t) => sum + Number(t.minutes || 0), 0);
+  const capacityRatio = Math.min(1, DAILY_CAPACITY_MINUTES / Math.max(plannedMinutes || DAILY_CAPACITY_MINUTES, DAILY_CAPACITY_MINUTES));
+  const focusRatio = Math.min(1, (state.focusMinutes || 0) / 180);
+  const spendRatio = state.money.income ? Math.min(1, (state.tasks.filter(t => !t.completed).reduce((sum, t) => sum + Number(t.cost || 0), 0) / (state.money.income * 0.2 || 1))) : 0.7;
+  const score = Math.min(100, Math.round((completedRatio * 55) + (capacityRatio * 25) + (focusRatio * 20)));
+
+  const badge = score >= 75 ? "Balanced" : score >= 50 ? "Watchful" : "Overloaded";
+  const text = score >= 75
+    ? "Your plan is healthy. Maintain the routine and avoid adding low-value tasks."
+    : score >= 50
+      ? "You are moving, but a few tasks are crowding out your best work. Prioritize 3 wins."
+      : "The plan is too full. Cut or defer low-impact work to protect focus and energy.";
+
+  $("#lifeBalanceValue").textContent = score;
+  $("#balanceBar").style.width = `${score}%`;
+  $("#balanceBadge").textContent = badge;
+  $("#balanceText").textContent = text;
+}
+
 function renderFinance() {
   $("#incomeInput").value = state.money.income || "";
   $("#savingsTargetInput").value = state.money.target || "";
@@ -340,6 +364,7 @@ function renderInsights() {
 function renderAll() {
   renderTasks();
   renderDashboard();
+  renderBalance();
   renderFinance();
   renderStudy();
   renderFitness();

@@ -106,6 +106,20 @@ That makes the MVP backend-free, private by default, and easy to reset — but d
 
 ## Deployment
 
+This project is a static frontend and is ready to deploy without a build step.
+
+**Render (recommended for a simple static deployment):**
+1. Push the repo to GitHub.
+2. In Render, click New → Static Site.
+3. Connect your GitHub repository.
+4. Use the default settings or set:
+   - Name: `taskledger`
+   - Root Directory: `.`
+   - Build Command: leave blank
+   - Publish Directory: `.`
+5. Click Create Static Site.
+6. Render will publish the site from the repo root and give you a live URL.
+
 **GitHub Pages:** push to GitHub, then enable Settings → Pages and select the branch containing `index.html`.
 
 **Netlify:** import the repo. Build command: none. Publish directory: `/`.

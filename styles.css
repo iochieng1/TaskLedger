@@ -162,6 +162,13 @@ input, select, textarea {
 .score { font-family: "Space Grotesk"; font-weight: 800; font-size: 62px; margin-top: 6px; }
 .score-text { font-family: "Space Grotesk"; font-weight: 700; font-size: 26px; margin: 14px 0 5px; }
 .insight-copy { margin-top: 12px; font-size: 17px; line-height: 1.55; }
+.balance-panel { margin-top: 18px; }
+.balance-metric { display: grid; grid-template-columns: 180px 1fr; gap: 18px; align-items: center; }
+.balance-meter { height: 12px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
+.balance-meter span { display: block; width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--accent), var(--blue)); transition: width .3s ease; }
+#lifeBalanceValue { font-size: clamp(42px, 5vw, 64px); margin: 0; }
+#balanceBadge { background: #e7f8ef; color: #0f8b62; }
+body.dark #balanceBadge { background: rgba(34, 185, 133, .15); color: #8ce7c0; }
 .feature-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
 .feature-grid div { border: 1px solid var(--line); border-radius: 13px; padding: 14px; }
 .feature-grid b { display: block; margin-bottom: 6px; }
