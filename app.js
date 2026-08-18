@@ -19,8 +19,8 @@ const categoryNames = {
 
 const todayISO = () => {
   const d = new Date();
-  const offset = d.getTimezoneOffset() * 60000;
-  return new Date(d - offset).toISOString().slice(0, 10);
+  const localDate = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+  return localDate.toISOString().slice(0, 10);
 };
 
 const formatKES = (value) => `KES ${Number(value || 0).toLocaleString("en-KE")}`;
@@ -165,9 +165,20 @@ function renderTasks() {
 function toggleTask(id) {
   const task = state.tasks.find(t => t.id === id);
   if (!task) return;
+  
+  const wasCompleted = task.completed;
   task.completed = !task.completed;
   task.completedAt = task.completed ? new Date().toISOString() : null;
-  if (task.completed && task.category === "study") state.focusMinutes += Number(task.minutes || 0);
+  
+  if (task.category === "study") {
+    const minuteChange = Number(task.minutes || 0);
+    if (task.completed && !wasCompleted) {
+      state.focusMinutes += minuteChange;
+    } else if (!task.completed && wasCompleted) {
+      state.focusMinutes -= minuteChange;
+    }
+  }
+  
   save();
   renderAll();
 }
@@ -270,7 +281,8 @@ function renderFitness() {
   const all = state.tasks.filter(t => t.category === "fitness");
   const done = all.filter(t => t.completed);
   const mins = all.reduce((s, t) => s + Number(t.minutes || 0), 0);
-  const avg = all.length ? Math.round(all.reduce((s, t) => s + ({low:1, medium:2, high:3}[t.energy] || 2), 0) / all.length) : 0;
+  const energyMap = { low: 1, medium: 2, high: 3 };
+  const avg = all.length ? Math.round(all.reduce((s, t) => s + (energyMap[t.energy] ?? 2), 0) / all.length) : 0;
   $("#fitnessMinutes").textContent = mins;
   $("#fitnessDone").textContent = done.length;
   $("#fitnessPlanned").textContent = all.length - done.length;
@@ -278,13 +290,22 @@ function renderFitness() {
 }
 
 function calculateStreak() {
-  const days = new Set(state.tasks.filter(t => t.completedAt).map(t => t.completedAt.slice(0, 10)));
-  let cursor = new Date(`${todayISO()}T00:00:00`);
+  const days = new Set(state.tasks
+    .filter(t => t.completedAt)
+    .map(t => t.completedAt.slice(0, 10))
+  );
+  
+  if (days.size === 0) return 0;
+  
+  let cursor = new Date();
+  cursor.setDate(cursor.getDate() - 1);
   let streak = 0;
+  
   while (days.has(cursor.toISOString().slice(0, 10))) {
     streak += 1;
     cursor.setDate(cursor.getDate() - 1);
   }
+  
   return streak;
 }
 
@@ -304,10 +325,12 @@ function renderInsights() {
   }).filter(x => x.count).sort((a,b) => b.pct - a.pct);
   $("#bestCategory").textContent = cats.length ? categoryNames[cats[0].cat] : "—";
 
-  const planned = all.filter(t => !t.completed).reduce((s, t) => s + Number(t.minutes || 0), 0);
+  const today = todayISO();
+  const todayAll = all.filter(t => t.date === today);
+  const todayMinutes = todayAll.reduce((s, t) => s + Number(t.minutes || 0), 0);
   const spend = all.filter(t => !t.completed).reduce((s, t) => s + Number(t.cost || 0), 0);
   let insight = "Add more tasks and complete a few to unlock stronger feedback.";
-  if (planned > 360) insight = `You have ${planned - 360} minutes over a six-hour execution capacity. Reduce the queue before adding more.`;
+  if (todayMinutes > DAILY_CAPACITY_MINUTES) insight = `Today is overloaded by ${todayMinutes - DAILY_CAPACITY_MINUTES} minutes. Defer or delete tasks to fit your capacity.`;
   else if (spend > (state.money.income || Infinity) * 0.2 && state.money.income) insight = `Planned task spending is ${formatKES(spend)}. Check whether all costs support your current priorities.`;
   else if (streak >= 3) insight = `${streak}-day execution streak. Protect the routine rather than chasing a perfect plan.`;
   else if (completion >= .7) insight = "Your completion rate is strong. The next upgrade is improving task quality and effort estimates.";
