@@ -147,3 +147,377 @@ This project is currently intended as a portfolio and learning project. Add a li
 ## Author
 
 **Ian Ochieng** — Software Developer / Apprentice — GitHub: `@iochieng1`
+
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+# ============================================================
+# FlexiRide Backend
+# Cross-Cutting Observability Setup
+#
+# Covers:
+#   - Spring Boot Actuator
+#   - Prometheus metrics
+#   - JSON structured logging
+#   - traceId / spanId MDC fields
+#   - application/service names
+#   - management endpoints
+#   - build verification
+#
+# Repository:
+#   flexiride-backend
+#
+# Java:
+#   21
+#
+# ============================================================
+
+echo "============================================================"
+echo "FlexiRide Backend - Observability Setup"
+echo "============================================================"
+
+# ------------------------------------------------------------
+# 1. Go to repository root
+# ------------------------------------------------------------
+
+cd "$(git rev-parse --show-toplevel)"
+
+echo
+echo "Repository:"
+pwd
+
+# ------------------------------------------------------------
+# 2. Verify Java / Maven wrapper
+# ------------------------------------------------------------
+
+echo
+echo "===== JAVA / MAVEN ====="
+
+./services/mvnw -version
+
+# Expected:
+# Java version: 21.x
+# Apache Maven 3.8.7 or compatible Maven wrapper version
+
+# ------------------------------------------------------------
+# 3. Verify Java version configured by the project
+# ------------------------------------------------------------
+
+echo
+echo "===== JAVA VERSION CONFIGURATION ====="
+
+grep -nE \
+  '<java.version>|<maven.compiler.source>|<maven.compiler.target>|<release>' \
+  pom.xml \
+  services/*/pom.xml \
+  2>/dev/null || true
+
+# Expected:
+# Java 21
+
+# ------------------------------------------------------------
+# 4. Verify root dependency management
+# ------------------------------------------------------------
+
+echo
+echo "===== ROOT OBSERVABILITY DEPENDENCY MANAGEMENT ====="
+
+grep -n -A4 -B2 \
+  -E 'micrometer-registry-prometheus|logstash-logback-encoder' \
+  pom.xml || true
+
+# Expected:
+# micrometer-registry-prometheus
+# logstash-logback-encoder
+
+# ------------------------------------------------------------
+# 5. Verify observability dependencies in every module
+# ------------------------------------------------------------
+
+echo
+echo "===== MODULE OBSERVABILITY DEPENDENCIES ====="
+
+for dir in services/* gateways/*; do
+
+  if [ -f "$dir/pom.xml" ]; then
+
+    echo
+    echo "===== $dir ====="
+
+    grep -E \
+      'spring-boot-starter-actuator|micrometer-registry-prometheus|logstash-logback-encoder' \
+      "$dir/pom.xml" || true
+
+  fi
+
+done
+
+# ------------------------------------------------------------
+# 6. Verify Actuator dependency in every module
+# ------------------------------------------------------------
+
+echo
+echo "===== ACTUATOR DEPENDENCY ====="
+
+for dir in services/* gateways/*; do
+
+  if [ -f "$dir/pom.xml" ]; then
+
+    if grep -q 'spring-boot-starter-actuator' "$dir/pom.xml"; then
+      echo "OK      $dir"
+    else
+      echo "MISSING $dir"
+    fi
+
+  fi
+
+done
+
+# ------------------------------------------------------------
+# 7. Verify Prometheus dependency in every module
+# ------------------------------------------------------------
+
+echo
+echo "===== PROMETHEUS DEPENDENCY ====="
+
+for dir in services/* gateways/*; do
+
+  if [ -f "$dir/pom.xml" ]; then
+
+    if grep -q 'micrometer-registry-prometheus' "$dir/pom.xml"; then
+      echo "OK      $dir"
+    else
+      echo "MISSING $dir"
+    fi
+
+  fi
+
+done
+
+# ------------------------------------------------------------
+# 8. Verify Logstash Logback encoder in every module
+# ------------------------------------------------------------
+
+echo
+echo "===== LOGSTASH LOGBACK DEPENDENCY ====="
+
+for dir in services/* gateways/*; do
+
+  if [ -f "$dir/pom.xml" ]; then
+
+    if grep -q 'logstash-logback-encoder' "$dir/pom.xml"; then
+      echo "OK      $dir"
+    else
+      echo "MISSING $dir"
+    fi
+
+  fi
+
+done
+
+# ------------------------------------------------------------
+# 9. Count Logback configuration files
+# ------------------------------------------------------------
+
+echo
+echo "===== LOGBACK FILE COUNT ====="
+
+find services gateways \
+  -type f \
+  -name "logback-spring.xml" \
+  | sort
+
+LOGBACK_COUNT=$(
+  find services gateways \
+    -type f \
+    -name "logback-spring.xml" \
+    | wc -l
+)
+
+echo
+echo "Logback files: $LOGBACK_COUNT"
+
+# Expected:
+# 15
+
+# ------------------------------------------------------------
+# 10. Verify traceId / spanId coverage
+# ------------------------------------------------------------
+
+echo
+echo "===== TRACE MDC COVERAGE ====="
+
+find services gateways \
+  -type f \
+  -name "logback-spring.xml" \
+  -print0 |
+while IFS= read -r -d '' file; do
+
+  if grep -q '<includeMdcKeyName>traceId</includeMdcKeyName>' "$file" &&
+     grep -q '<includeMdcKeyName>spanId</includeMdcKeyName>' "$file"; then
+
+    echo "OK      $file"
+
+  else
+
+    echo "MISSING $file"
+
+  fi
+
+done
+
+# ------------------------------------------------------------
+# 11. Verify management endpoint configuration
+# ------------------------------------------------------------
+
+echo
+echo "===== MANAGEMENT CONFIGURATION ====="
+
+grep -R -n -E \
+  'management\.endpoints|management:|prometheus|exposure:|show-details|probes:' \
+  services/*/src/main/resources/application.properties \
+  gateways/*/src/main/resources/application.properties \
+  gateways/*/src/main/resources/application.yml \
+  2>/dev/null || true
+
+# ------------------------------------------------------------
+# 12. Verify Prometheus exposure in services
+# ------------------------------------------------------------
+
+echo
+echo "===== PROMETHEUS CONFIG COUNT ====="
+
+PROMETHEUS_CONFIG_COUNT=$(
+  grep -R -l \
+    'management.endpoints.web.exposure.include=.*prometheus' \
+    services/*/src/main/resources/application.properties \
+    2>/dev/null |
+  wc -l
+)
+
+echo "Services exposing Prometheus: $PROMETHEUS_CONFIG_COUNT"
+
+# Expected:
+# 13 services
+
+# ------------------------------------------------------------
+# 13. Verify application names
+# ------------------------------------------------------------
+
+echo
+echo "===== APPLICATION NAMES ====="
+
+grep -H '^spring.application.name=' \
+  services/*/src/main/resources/application.properties \
+  gateways/web-bff/src/main/resources/application.properties \
+  2>/dev/null || true
+
+echo
+echo "===== BFF APPLICATION NAMES ====="
+
+grep -H '^spring.application.name=' \
+  gateways/mobile-bff/src/main/resources/application.yml \
+  gateways/web-bff/src/main/resources/application.yml \
+  2>/dev/null || true
+
+# Expected:
+# mobile-bff
+# web-bff
+#
+# Important:
+# web-bff application.properties must not override the YAML
+# application name with userService.
+
+# ------------------------------------------------------------
+# 14. Verify BFF management endpoints
+# ------------------------------------------------------------
+
+echo
+echo "===== MOBILE BFF MANAGEMENT ====="
+
+grep -A12 '^management:' \
+  gateways/mobile-bff/src/main/resources/application.yml || true
+
+echo
+echo "===== WEB BFF MANAGEMENT ====="
+
+grep -A12 '^management:' \
+  gateways/web-bff/src/main/resources/application.yml || true
+
+# Expected exposure:
+# health,info,metrics,env,loggers,prometheus
+
+# ------------------------------------------------------------
+# 15. Verify no temporary backup files remain
+# ------------------------------------------------------------
+
+echo
+echo "===== BACKUP FILES ====="
+
+BACKUP_COUNT=$(
+  find . \
+    -type f \
+    -name "*.backup-observability" |
+  wc -l
+)
+
+echo "Backup files: $BACKUP_COUNT"
+
+find . \
+  -type f \
+  -name "*.backup-observability" \
+  -print
+
+# Expected:
+# 0
+
+# ------------------------------------------------------------
+# 16. Verify User Service application class
+# ------------------------------------------------------------
+
+echo
+echo "===== USER SERVICE APPLICATION ====="
+
+grep -R -n \
+  -E '@SpringBootApplication|public static void main' \
+  services/user/src/main/java
+
+# ------------------------------------------------------------
+# 17. Build the entire project
+# ------------------------------------------------------------
+
+echo
+echo "============================================================"
+echo "===== MAVEN CLEAN VERIFY ====="
+echo "============================================================"
+
+./services/mvnw clean verify -DskipTests
+
+# Expected:
+# BUILD SUCCESS
+
+# ------------------------------------------------------------
+# 18. Show Git changes
+# ------------------------------------------------------------
+
+echo
+echo "============================================================"
+echo "===== GIT STATUS ====="
+echo "============================================================"
+
+git status --short
+
+echo
+echo "Observability verification complete."
+echo
+echo "Next step:"
+echo "  git diff"
+echo
+echo "Then commit:"
+echo "  git add ."
+echo "  git commit -m \"feat: add cross-cutting observability\""
+echo
+echo "Then push:"
+echo "  git push -u origin feat/add-cross-cutting-observability"
+
