@@ -314,6 +314,19 @@ MVP includes:
 
 ---
 
+### FR-04b: Next up
+
+**Description:** The product recommends what to do now, using the user's real constraints, and explains why.
+
+**Acceptance criteria:**
+
+- The user can set today's energy (low, medium, high) and available minutes; both reset to defaults on a new day.
+- Up to three open tasks are recommended, ranked by deadline, priority, goal contribution, energy fit, time left today and budget.
+- Each recommendation lists the reasons that affected its rank, including negative ones.
+- The smart queue (FR-04) keeps its own order; Next up is a separate view of the same tasks.
+
+---
+
 ### FR-05: Daily capacity
 
 **Description:** The product communicates whether a planned day is realistic.

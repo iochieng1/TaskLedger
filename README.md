@@ -37,6 +37,7 @@ Every task can carry five dimensions:
 ## Features
 
 - **Today dashboard** — daily execution capacity, planned minutes, savings progress, completed tasks, focus minutes, planned spending, current streak, smart task queue
+- **Next up** — the top 3 open tasks for right now, with the reasons for each, based on a quick check-in (energy today and time available)
 - **Smart task queue** — sorted by completion state, due date, priority, then estimated duration
 - **Task editing** — every task card has an edit action; changes keep the task's id and completion state
 - **Goals** — name the outcomes you're working toward, link tasks to them from the task form, and track open/done work per goal in Insights; archiving a goal keeps its history
@@ -127,6 +128,7 @@ All state lives in `localStorage["taskledger-v1"]`:
 }
 ```
 
+- **Check-in** is `{ date, energy, minutes }`. It only applies on the day it was set; on a new day it falls back to medium energy and 360 minutes. The minutes value is also the daily capacity on the dashboard.
 - **Goals** are `{ id, title, archived }`. A task's optional `goalId` points at one goal. Archived goals disappear from the picker for new tasks but stay linked to existing ones. Saves from before goals existed load with an empty goal list.
 - **Focus minutes** shown on the dashboard are `timerFocusMinutes` (completed focus-timer sessions) plus the minutes of completed study tasks. The study share is calculated, not stored, so completing, undoing, editing or deleting a study task always keeps the total consistent. Older saves with a single `focusMinutes` total are migrated automatically.
 - **Streaks** count consecutive local calendar days with at least one completion, including today.
@@ -134,6 +136,24 @@ All state lives in `localStorage["taskledger-v1"]`:
 - **Clear all data** and **Load demo data** in the sidebar both ask for confirmation first.
 
 That makes the MVP backend-free, private by default, and easy to reset — but data does not sync between devices. Cloud sync is Phase 3 in `PRD.md`.
+
+---
+
+## How Next up ranks tasks
+
+Each open task gets a score from simple, visible rules, no AI. Every rule that applies shows up as a chip on the card:
+
+| Rule | Effect | Chip |
+|---|---|---|
+| Overdue / due today / due tomorrow | +40 / +30 / +15 | "Overdue", "Due today", "Due tomorrow" |
+| High / medium priority | +20 / +10 | "High priority" |
+| Linked to an active goal | +15 | "Moves *goal*" |
+| Task energy at or below yours | +10 | "Fits your energy" |
+| Task energy above yours | −15 per level | "Needs high energy" |
+| Longer than the minutes left today | −25 | "Takes 90 min, 45 min left" |
+| Costs money while the monthly plan is over budget | −20 | "Plan is KES 1,000 over budget" |
+
+"Minutes left" is your available time minus the minutes of tasks completed today. "Over budget" means open task costs plus your savings target exceed your monthly income; it only applies once an income is set. Ties fall back to the smart queue order. The logic lives in `recommend()` in `core.js` and is covered by scenario tests.
 
 ---
 

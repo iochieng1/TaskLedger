@@ -111,6 +111,30 @@
           </article>
         </div>
 
+        <section class="panel next-up">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Next up</p>
+              <h2>What to do now</h2>
+            </div>
+            <div class="checkin">
+              <label>Energy today
+                <select id="checkinEnergy">
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                </select>
+              </label>
+              <label>Time available
+                <span class="checkin-minutes"><input id="checkinMinutes" type="number" min="0" max="1440" step="15" /> min</span>
+              </label>
+            </div>
+          </div>
+          <p id="nextUpSummary" class="muted small"></p>
+          <div id="nextUpList" class="task-list"></div>
+          <p id="nextUpEmpty" class="muted hidden">Nothing open. Add a task or enjoy the breathing room.</p>
+        </section>
+
         <article class="panel balance-panel">
           <div class="panel-head">
             <div>
@@ -355,6 +379,7 @@
           <span class="meta-due"></span>
           <span class="meta-goal"></span>
         </div>
+        <div class="reason-chips"></div>
       </div>
       <div class="task-actions">
         <button class="icon-btn edit-task" title="Edit task" aria-label="Edit task">✎</button>

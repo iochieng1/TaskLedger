@@ -29,7 +29,8 @@
       goals: [],
       money: { income: 0, target: 0, current: 0 },
       theme: "light",
-      timerFocusMinutes: 0
+      timerFocusMinutes: 0,
+      checkin: null
     };
   }
 
@@ -54,6 +55,7 @@
   const isObject = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
   const isDay = (v) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
   const toNumber = (v, fallback) => (Number.isFinite(Number(v)) && v !== null && v !== "" ? Number(v) : fallback);
+  const clampMinutes = (v) => Math.min(1440, Math.max(0, Math.round(toNumber(v, DAILY_CAPACITY_MINUTES))));
 
   function normalizeTask(raw) {
     if (!isObject(raw) || typeof raw.title !== "string" || !raw.title.trim()) return null;
@@ -120,7 +122,14 @@
         current: Math.max(0, toNumber(money.current, 0))
       },
       theme: THEMES.includes(parsed.theme) ? parsed.theme : "light",
-      timerFocusMinutes: 0
+      timerFocusMinutes: 0,
+      checkin: isObject(parsed.checkin) && isDay(parsed.checkin.date)
+        ? {
+          date: parsed.checkin.date,
+          energy: ENERGY_LEVELS.includes(parsed.checkin.energy) ? parsed.checkin.energy : "medium",
+          minutes: clampMinutes(parsed.checkin.minutes)
+        }
+        : null
     };
 
     if (parsed.timerFocusMinutes !== undefined) {
@@ -237,6 +246,22 @@
     return Number(a.minutes) - Number(b.minutes);
   }
 
+  function checkinFor(state, today) {
+    const c = state.checkin;
+    if (c && c.date === today) return { energy: c.energy, minutes: c.minutes };
+    return { energy: "medium", minutes: DAILY_CAPACITY_MINUTES };
+  }
+
+  function setCheckin(state, today, input) {
+    const current = checkinFor(state, today);
+    state.checkin = {
+      date: today,
+      energy: ENERGY_LEVELS.includes(input.energy) ? input.energy : current.energy,
+      minutes: input.minutes === undefined ? current.minutes : clampMinutes(input.minutes)
+    };
+    return state.checkin;
+  }
+
   function daySummary(tasks, today, capacity = DAILY_CAPACITY_MINUTES) {
     const todayTasks = tasks.filter((t) => t.date === today);
     const open = todayTasks.filter((t) => !t.completed);
@@ -245,7 +270,9 @@
       completedCount: todayTasks.length - open.length,
       plannedMinutes,
       plannedSpend: open.reduce((sum, t) => sum + Number(t.cost || 0), 0),
-      capacityPercent: Math.min(100, Math.round((plannedMinutes / capacity) * 100)),
+      capacityPercent: capacity > 0
+        ? Math.min(100, Math.round((plannedMinutes / capacity) * 100))
+        : plannedMinutes > 0 ? 100 : 0,
       overCapacity: plannedMinutes > capacity,
       heavy: plannedMinutes > capacity - 60
     };
@@ -264,6 +291,66 @@
       savingPercent: target ? Math.min(100, Math.round((current / target) * 100)) : 0,
       leftToTarget: Math.max(0, target - current)
     };
+  }
+
+  function minutesDoneToday(tasks, today) {
+    return tasks
+      .filter((t) => t.completed && t.completedAt && localDayISO(new Date(t.completedAt)) === today)
+      .reduce((sum, t) => sum + Number(t.minutes || 0), 0);
+  }
+
+  const ENERGY_RANK = { low: 1, medium: 2, high: 3 };
+
+  function scoreTask(task, ctx) {
+    const reasons = [];
+    let score = 0;
+    const good = (text) => reasons.push({ text, tone: "good" });
+    const warn = (text) => reasons.push({ text, tone: "warn" });
+
+    if (task.date < ctx.today) { score += 40; warn("Overdue"); }
+    else if (task.date === ctx.today) { score += 30; good("Due today"); }
+    else if (task.date === ctx.tomorrow) { score += 15; good("Due tomorrow"); }
+
+    if (Number(task.priority) === 3) { score += 20; good("High priority"); }
+    else if (Number(task.priority) === 2) score += 10;
+
+    const goal = ctx.goals.get(task.goalId);
+    if (goal) { score += 15; good(`Moves "${goal.title}"`); }
+
+    const gap = ENERGY_RANK[task.energy] - ENERGY_RANK[ctx.energy];
+    if (gap <= 0) { score += 10; good("Fits your energy"); }
+    else { score -= 15 * gap; warn(`Needs ${task.energy} energy`); }
+
+    const minutes = Number(task.minutes || 0);
+    if (minutes > ctx.minutesLeft) {
+      score -= 25;
+      warn(ctx.minutesLeft > 0 ? `Takes ${minutes} min, ${ctx.minutesLeft} min left` : "No time left today");
+    }
+
+    if (Number(task.cost || 0) > 0 && ctx.overBudget > 0) {
+      score -= 20;
+      warn(`Plan is KES ${ctx.overBudget.toLocaleString("en-KE")} over budget`);
+    }
+
+    return { task, score, reasons };
+  }
+
+  function recommend(state, today = localDayISO(), limit = 3) {
+    const checkin = checkinFor(state, today);
+    const money = financeSummary(state.money, state.tasks);
+    const ctx = {
+      today,
+      tomorrow: addDays(today, 1),
+      energy: checkin.energy,
+      minutesLeft: Math.max(0, checkin.minutes - minutesDoneToday(state.tasks, today)),
+      overBudget: money.income > 0 && money.available < 0 ? -money.available : 0,
+      goals: new Map(state.goals.filter((g) => !g.archived).map((g) => [g.id, g]))
+    };
+    return state.tasks
+      .filter((t) => !t.completed)
+      .map((t) => scoreTask(t, ctx))
+      .sort((a, b) => b.score - a.score || smartSort(a.task, b.task))
+      .slice(0, limit);
   }
 
   function calculateStreak(tasks, today = localDayISO()) {
@@ -301,7 +388,11 @@
     goalTitle,
     goalSummaries,
     smartSort,
+    checkinFor,
+    setCheckin,
     daySummary,
+    minutesDoneToday,
+    recommend,
     financeSummary,
     calculateStreak
   };
