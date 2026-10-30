@@ -386,3 +386,136 @@ describe("goals", () => {
     assert.ok(demo.tasks.every((t) => t.goalId === null || ids.has(t.goalId)));
   });
 });
+
+describe("daily check-in", () => {
+  test("defaults to medium energy and the standard capacity", () => {
+    assert.deepEqual(Core.checkinFor(Core.emptyState(), TODAY), { energy: "medium", minutes: Core.DAILY_CAPACITY_MINUTES });
+  });
+
+  test("applies only to the day it was set", () => {
+    const state = Core.emptyState();
+    Core.setCheckin(state, TODAY, { energy: "low", minutes: 120 });
+    assert.deepEqual(Core.checkinFor(state, TODAY), { energy: "low", minutes: 120 });
+    assert.deepEqual(Core.checkinFor(state, "2026-10-31"), { energy: "medium", minutes: Core.DAILY_CAPACITY_MINUTES });
+  });
+
+  test("partial updates keep the other value and clamp minutes", () => {
+    const state = Core.emptyState();
+    Core.setCheckin(state, TODAY, { energy: "high" });
+    Core.setCheckin(state, TODAY, { minutes: 5000 });
+    assert.deepEqual(Core.checkinFor(state, TODAY), { energy: "high", minutes: 1440 });
+    Core.setCheckin(state, TODAY, { minutes: -30, energy: "sleepy" });
+    assert.deepEqual(Core.checkinFor(state, TODAY), { energy: "high", minutes: 0 });
+  });
+
+  test("survives a refresh, and bad saved check-ins are ignored", () => {
+    const state = Core.emptyState();
+    Core.setCheckin(state, TODAY, { energy: "low", minutes: 90 });
+    assert.deepEqual(Core.checkinFor(refresh(state), TODAY), { energy: "low", minutes: 90 });
+    const bad = Core.parseState(JSON.stringify({ checkin: { date: "yesterday", energy: "low" } }));
+    assert.equal(bad.state.checkin, null);
+  });
+
+  test("zero capacity does not divide by zero", () => {
+    assert.equal(Core.daySummary([], TODAY, 0).capacityPercent, 0);
+    assert.equal(Core.daySummary([task({ minutes: 10 })], TODAY, 0).capacityPercent, 100);
+  });
+});
+
+describe("next up recommendations", () => {
+  const ids = (recs) => recs.map((r) => r.task.id);
+  const reasonsOf = (recs, id) => recs.find((r) => r.task.id === id).reasons.map((r) => r.text);
+
+  test("completed tasks are never recommended and the list is capped", () => {
+    const state = stateWith([task({ id: "done", completed: true, completedAt: completedAtLocal(2026, 10, 30) }), task({ id: "a" }), task({ id: "b" }), task({ id: "c" }), task({ id: "d" })]);
+    const recs = Core.recommend(state, TODAY);
+    assert.equal(recs.length, 3);
+    assert.ok(!ids(recs).includes("done"));
+  });
+
+  test("overdue beats due today beats due tomorrow beats later", () => {
+    const state = stateWith([
+      task({ id: "later", date: "2026-11-20" }),
+      task({ id: "tomorrow", date: "2026-10-31" }),
+      task({ id: "today" }),
+      task({ id: "overdue", date: "2026-10-28" })
+    ]);
+    assert.deepEqual(ids(Core.recommend(state, TODAY, 4)), ["overdue", "today", "tomorrow", "later"]);
+  });
+
+  test("a goal-linked task beats an unlinked one at equal priority and date", () => {
+    const state = Core.emptyState();
+    const goal = Core.addGoal(state, "Get a dev job");
+    state.tasks = [task({ id: "plain" }), task({ id: "linked", goalId: goal.id })];
+    const recs = Core.recommend(state, TODAY);
+    assert.deepEqual(ids(recs), ["linked", "plain"]);
+    assert.ok(reasonsOf(recs, "linked").includes('Moves "Get a dev job"'));
+  });
+
+  test("archived goals give no boost", () => {
+    const state = Core.emptyState();
+    const goal = Core.addGoal(state, "Old");
+    Core.setGoalArchived(state, goal.id, true);
+    state.tasks = [task({ id: "linked", goalId: goal.id, minutes: 40 }), task({ id: "plain", minutes: 30 })];
+    assert.deepEqual(ids(Core.recommend(state, TODAY)), ["plain", "linked"]);
+  });
+
+  test("on a low-energy day, low-energy tasks rise above high-energy ones", () => {
+    const state = stateWith([
+      task({ id: "hard1", energy: "high", priority: 3 }),
+      task({ id: "hard2", energy: "high", priority: 3 }),
+      task({ id: "hard3", energy: "high", priority: 3 }),
+      task({ id: "easy", energy: "low", priority: 2 })
+    ]);
+    Core.setCheckin(state, TODAY, { energy: "low" });
+    const recs = Core.recommend(state, TODAY);
+    assert.equal(recs[0].task.id, "easy");
+    assert.ok(reasonsOf(recs, "easy").includes("Fits your energy"));
+    assert.ok(reasonsOf(recs, "hard1").includes("Needs high energy"));
+  });
+
+  test("on a high-energy day, priority wins over energy", () => {
+    const state = stateWith([task({ id: "easy", energy: "low", priority: 2 }), task({ id: "hard", energy: "high", priority: 3 })]);
+    Core.setCheckin(state, TODAY, { energy: "high" });
+    assert.equal(Core.recommend(state, TODAY)[0].task.id, "hard");
+  });
+
+  test("tasks longer than the time left are flagged and pushed down", () => {
+    const state = stateWith([
+      task({ id: "done", minutes: 60, completed: true, completedAt: completedAtLocal(2026, 10, 30, 9) }),
+      task({ id: "long", minutes: 90, priority: 3 }),
+      task({ id: "short", minutes: 30, priority: 2 })
+    ]);
+    Core.setCheckin(state, TODAY, { minutes: 120 });
+    const recs = Core.recommend(state, TODAY);
+    assert.deepEqual(ids(recs), ["short", "long"]);
+    assert.ok(reasonsOf(recs, "long").includes("Takes 90 min, 60 min left"));
+  });
+
+  test("completions from earlier days do not use up today's time", () => {
+    const state = stateWith([
+      task({ id: "old", minutes: 300, completed: true, completedAt: completedAtLocal(2026, 10, 29, 9) }),
+      task({ id: "next", minutes: 90 })
+    ]);
+    Core.setCheckin(state, TODAY, { minutes: 120 });
+    assert.ok(!reasonsOf(Core.recommend(state, TODAY), "next").some((r) => r.includes("min left")));
+  });
+
+  test("when the money plan is over budget, costed tasks are flagged", () => {
+    const state = stateWith([task({ id: "spend", cost: 2000, priority: 3 }), task({ id: "free", cost: 0, priority: 2 })]);
+    state.money = { income: 10000, target: 9000, current: 0 };
+    const recs = Core.recommend(state, TODAY);
+    assert.deepEqual(ids(recs), ["free", "spend"]);
+    assert.ok(reasonsOf(recs, "spend").includes(`Plan is KES ${(1000).toLocaleString("en-KE")} over budget`));
+  });
+
+  test("costs are not flagged when no income is set", () => {
+    const state = stateWith([task({ id: "spend", cost: 2000 })]);
+    assert.ok(Core.recommend(state, TODAY)[0].reasons.every((r) => !r.text.includes("budget")));
+  });
+
+  test("equal scores fall back to the smart queue order", () => {
+    const state = stateWith([task({ id: "long", minutes: 60 }), task({ id: "short", minutes: 20 })]);
+    assert.deepEqual(ids(Core.recommend(state, TODAY)), ["short", "long"]);
+  });
+});

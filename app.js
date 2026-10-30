@@ -1,7 +1,6 @@
 const Core = window.TaskLedgerCore;
 
 const STORAGE_KEY = "taskledger-v1";
-const DAILY_CAPACITY_MINUTES = Core.DAILY_CAPACITY_MINUTES;
 const FOCUS_SESSION_SECONDS = 25 * 60;
 const BREAK_SECONDS = 5 * 60;
 
@@ -127,6 +126,7 @@ function renderTaskCard(task, container) {
   deleteBtn.setAttribute("aria-label", `Delete "${task.title}"`);
   deleteBtn.addEventListener("click", () => deleteTask(task.id));
   container.appendChild(card);
+  return root;
 }
 
 function renderTasks() {
@@ -150,6 +150,40 @@ function renderTasks() {
     box.innerHTML = "";
     state.tasks.filter(t => t.category === cat).sort(Core.smartSort).forEach(t => renderTaskCard(t, box));
   }
+}
+
+function renderNextUp() {
+  const today = todayISO();
+  const checkin = Core.checkinFor(state, today);
+  $("#checkinEnergy").value = checkin.energy;
+  if (document.activeElement !== $("#checkinMinutes")) $("#checkinMinutes").value = checkin.minutes;
+
+  const minutesLeft = Math.max(0, checkin.minutes - Core.minutesDoneToday(state.tasks, today));
+  $("#nextUpSummary").textContent = `${minutesLeft} min left today · ${checkin.energy} energy. Ranked by deadline, priority, goals, energy, time and budget.`;
+
+  const list = $("#nextUpList");
+  list.innerHTML = "";
+  const recs = Core.recommend(state, today);
+  $("#nextUpEmpty").classList.toggle("hidden", recs.length > 0);
+  for (const { task, reasons } of recs) {
+    const root = renderTaskCard(task, list);
+    const chips = root.querySelector(".reason-chips");
+    for (const reason of reasons) {
+      const chip = document.createElement("span");
+      chip.className = `reason-chip ${reason.tone}`;
+      chip.textContent = reason.text;
+      chips.appendChild(chip);
+    }
+  }
+}
+
+function updateCheckin() {
+  Core.setCheckin(state, todayISO(), {
+    energy: $("#checkinEnergy").value,
+    minutes: $("#checkinMinutes").value
+  });
+  save();
+  renderAll();
 }
 
 function toggleTask(id) {
@@ -289,10 +323,11 @@ function renderGoals() {
 }
 
 function renderDashboard() {
-  const day = Core.daySummary(state.tasks, todayISO());
+  const capacity = Core.checkinFor(state, todayISO()).minutes;
+  const day = Core.daySummary(state.tasks, todayISO(), capacity);
   const money = Core.financeSummary(state.money, state.tasks);
 
-  $("#capacityHeadline").textContent = `${day.plannedMinutes} / ${DAILY_CAPACITY_MINUTES} min planned`;
+  $("#capacityHeadline").textContent = `${day.plannedMinutes} / ${capacity} min planned`;
   $("#capacityText").textContent = day.overCapacity
     ? "You are over capacity. Move or remove something."
     : day.heavy
@@ -320,8 +355,9 @@ function renderBalance() {
   const allTasks = state.tasks;
   const totalTasks = allTasks.length || 1;
   const completedRatio = allTasks.filter(t => t.completed).length / totalTasks;
-  const { plannedMinutes } = Core.daySummary(allTasks, todayISO());
-  const capacityRatio = Math.min(1, DAILY_CAPACITY_MINUTES / Math.max(plannedMinutes || DAILY_CAPACITY_MINUTES, DAILY_CAPACITY_MINUTES));
+  const capacity = Core.checkinFor(state, todayISO()).minutes;
+  const { plannedMinutes } = Core.daySummary(allTasks, todayISO(), capacity);
+  const capacityRatio = plannedMinutes <= capacity ? 1 : capacity / plannedMinutes;
   const focusRatio = Math.min(1, Core.totalFocusMinutes(state) / 180);
   const score = Math.min(100, Math.round((completedRatio * 55) + (capacityRatio * 25) + (focusRatio * 20)));
 
@@ -394,7 +430,8 @@ function renderInsights() {
   const todayMinutes = todayAll.reduce((s, t) => s + Number(t.minutes || 0), 0);
   const spend = all.filter(t => !t.completed).reduce((s, t) => s + Number(t.cost || 0), 0);
   let insight = "Add more tasks and complete a few to unlock stronger feedback.";
-  if (todayMinutes > DAILY_CAPACITY_MINUTES) insight = `Today is overloaded by ${todayMinutes - DAILY_CAPACITY_MINUTES} minutes. Defer or delete tasks to fit your capacity.`;
+  const capacity = Core.checkinFor(state, today).minutes;
+  if (todayMinutes > capacity) insight = `Today is over capacity by ${todayMinutes - capacity} minutes. Defer or delete tasks to fit your available time.`;
   else if (spend > (state.money.income || Infinity) * 0.2 && state.money.income) insight = `Planned task spending is ${formatKES(spend)}. Check whether all costs support your current priorities.`;
   else if (streak >= 3) insight = `${streak}-day execution streak. Protect the routine rather than chasing a perfect plan.`;
   else if (completion >= .7) insight = "Your completion rate is strong. The next upgrade is improving task quality and effort estimates.";
@@ -403,6 +440,7 @@ function renderInsights() {
 
 function renderAll() {
   renderTasks();
+  renderNextUp();
   renderDashboard();
   renderBalance();
   renderFinance();
@@ -507,6 +545,8 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#taskFilter").addEventListener("change", renderTasks);
   $("#taskForm").addEventListener("submit", submitTask);
   $("#taskGoal").addEventListener("change", onGoalSelect);
+  $("#checkinEnergy").addEventListener("change", updateCheckin);
+  $("#checkinMinutes").addEventListener("change", updateCheckin);
   $("#goalForm").addEventListener("submit", (e) => {
     e.preventDefault();
     if (Core.addGoal(state, $("#goalTitleInput").value)) {
