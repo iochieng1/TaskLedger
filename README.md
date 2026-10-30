@@ -38,6 +38,7 @@ Every task can carry five dimensions:
 
 - **Today dashboard** — daily execution capacity, planned minutes, savings progress, completed tasks, focus minutes, planned spending, current streak, smart task queue
 - **Next up** — the top 3 open tasks for right now, with the reasons for each, based on a quick check-in (energy today and time available)
+- **Plan alerts** — over capacity, energy mismatch and over-budget warnings, each with a one-click fix: move to tomorrow, reschedule, show lower-energy tasks, or edit the cost
 - **Smart task queue** — sorted by completion state, due date, priority, then estimated duration
 - **Task editing** — every task card has an edit action; changes keep the task's id and completion state
 - **Goals** — name the outcomes you're working toward, link tasks to them from the task form, and track open/done work per goal in Insights; archiving a goal keeps its history
@@ -154,6 +155,18 @@ Each open task gets a score from simple, visible rules, no AI. Every rule that a
 | Costs money while the monthly plan is over budget | −20 | "Plan is KES 1,000 over budget" |
 
 "Minutes left" is your available time minus the minutes of tasks completed today. "Over budget" means open task costs plus your savings target exceed your monthly income; it only applies once an income is set. Ties fall back to the smart queue order. The logic lives in `recommend()` in `core.js` and is covered by scenario tests.
+
+### Plan alerts
+
+The Next up panel shows an alert when the plan doesn't fit, each with a way to fix it:
+
+| Alert | When | Action |
+|---|---|---|
+| Over capacity by N min | Open work due today or overdue is longer than the minutes left | Move the lowest-ranked tasks to tomorrow (one at a time or all at once) or reschedule them |
+| N tasks need more than *low* energy | You've checked in for today and some work due today needs more energy than you have | Show lower-energy tasks, which filters Next up to tasks that fit |
+| Plan is KES N over budget | Open task costs plus your savings target exceed this month's income | Edit the costed tasks, lowest-ranked first |
+
+Suggestions to move work always start from the bottom of the ranking, so high-priority, goal-linked and overdue work stays on today. The logic is `planConflicts()` and `deferTask()` in `core.js`.
 
 ---
 

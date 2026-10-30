@@ -519,3 +519,122 @@ describe("next up recommendations", () => {
     assert.deepEqual(ids(Core.recommend(state, TODAY)), ["short", "long"]);
   });
 });
+
+describe("plan conflicts", () => {
+  test("a plan that fits has no conflicts", () => {
+    const state = stateWith([task({ minutes: 60, energy: "low" })]);
+    assert.deepEqual(Core.planConflicts(state, TODAY), { capacity: null, energy: null, budget: null });
+  });
+
+  test("over capacity suggests deferring the lowest-ranked tasks until the day fits", () => {
+    const state = stateWith([
+      task({ id: "key", minutes: 60, priority: 3 }),
+      task({ id: "mid", minutes: 60, priority: 2 }),
+      task({ id: "low1", minutes: 30, priority: 1 }),
+      task({ id: "low2", minutes: 45, priority: 1 })
+    ]);
+    Core.setCheckin(state, TODAY, { minutes: 120 });
+    const { capacity } = Core.planConflicts(state, TODAY);
+    assert.equal(capacity.plannedMinutes, 195);
+    assert.equal(capacity.overBy, 75);
+    assert.deepEqual(capacity.deferIds, ["low2", "low1"]);
+    assert.equal(capacity.freedMinutes, 75);
+  });
+
+  test("overdue work counts toward today's load", () => {
+    const state = stateWith([task({ date: "2026-10-28", minutes: 100 }), task({ minutes: 30 })]);
+    Core.setCheckin(state, TODAY, { minutes: 90 });
+    assert.equal(Core.planConflicts(state, TODAY).capacity.plannedMinutes, 130);
+  });
+
+  test("time already spent today shrinks what fits", () => {
+    const state = stateWith([
+      task({ minutes: 100, completed: true, completedAt: completedAtLocal(2026, 10, 30, 9) }),
+      task({ id: "open", minutes: 60 })
+    ]);
+    Core.setCheckin(state, TODAY, { minutes: 120 });
+    const { capacity } = Core.planConflicts(state, TODAY);
+    assert.equal(capacity.minutesLeft, 20);
+    assert.deepEqual(capacity.deferIds, ["open"]);
+  });
+
+  test("future tasks do not create a capacity conflict", () => {
+    const state = stateWith([task({ date: "2026-10-31", minutes: 600 })]);
+    assert.equal(Core.planConflicts(state, TODAY).capacity, null);
+  });
+
+  test("a low-energy day with demanding tasks counts lower-energy alternatives", () => {
+    const state = stateWith([
+      task({ id: "hard", energy: "high" }),
+      task({ id: "mid", energy: "medium" }),
+      task({ id: "easy", energy: "low" }),
+      task({ id: "easy-tomorrow", energy: "low", date: "2026-10-31" }),
+      task({ id: "easy-later", energy: "low", date: "2026-11-15" })
+    ]);
+    Core.setCheckin(state, TODAY, { energy: "low" });
+    const { energy } = Core.planConflicts(state, TODAY);
+    assert.deepEqual(energy.demandingIds.sort(), ["hard", "mid"]);
+    assert.equal(energy.alternativeCount, 2);
+  });
+
+  test("no energy conflict until the user checks in for today", () => {
+    const state = stateWith([task({ energy: "high" })]);
+    assert.equal(Core.planConflicts(state, TODAY).energy, null);
+    Core.setCheckin(state, "2026-10-29", { energy: "low" });
+    assert.equal(Core.planConflicts(state, TODAY).energy, null);
+    Core.setCheckin(state, TODAY, { energy: "medium" });
+    assert.deepEqual(Core.planConflicts(state, TODAY).energy.demandingIds, [state.tasks[0].id]);
+  });
+
+  test("a high-energy day never has an energy conflict", () => {
+    const state = stateWith([task({ energy: "high" })]);
+    Core.setCheckin(state, TODAY, { energy: "high" });
+    assert.equal(Core.planConflicts(state, TODAY).energy, null);
+  });
+
+  test("over budget lists costed tasks, lowest-ranked first", () => {
+    const state = stateWith([
+      task({ id: "important", cost: 1500, priority: 3 }),
+      task({ id: "optional", cost: 800, priority: 1 }),
+      task({ id: "free", cost: 0 })
+    ]);
+    state.money = { income: 5000, target: 4000, current: 0 };
+    const { budget } = Core.planConflicts(state, TODAY);
+    assert.equal(budget.overBy, 1300);
+    assert.deepEqual(budget.costedIds, ["optional", "important"]);
+  });
+
+  test("the energy filter keeps only tasks that fit", () => {
+    const state = stateWith([task({ id: "hard", energy: "high", priority: 3 }), task({ id: "easy", energy: "low" })]);
+    Core.setCheckin(state, TODAY, { energy: "low" });
+    assert.deepEqual(Core.recommend(state, TODAY, 3, { fitsEnergyOnly: true }).map((r) => r.task.id), ["easy"]);
+  });
+});
+
+describe("deferring", () => {
+  test("moves an open task to tomorrow, including overdue ones", () => {
+    const state = stateWith([task({ id: "a" }), task({ id: "late", date: "2026-10-20" })]);
+    Core.deferTask(state, "a", TODAY);
+    Core.deferTask(state, "late", TODAY);
+    assert.deepEqual(refresh(state).tasks.map((t) => t.date), ["2026-10-31", "2026-10-31"]);
+  });
+
+  test("ignores completed and unknown tasks", () => {
+    const state = stateWith([task({ id: "done", completed: true, completedAt: completedAtLocal(2026, 10, 30) })]);
+    assert.equal(Core.deferTask(state, "done", TODAY), null);
+    assert.equal(Core.deferTask(state, "missing", TODAY), null);
+    assert.equal(state.tasks[0].date, TODAY);
+  });
+
+  test("deferring the suggested tasks resolves the capacity conflict", () => {
+    const state = stateWith([
+      task({ id: "key", minutes: 90, priority: 3 }),
+      task({ id: "a", minutes: 60, priority: 1 }),
+      task({ id: "b", minutes: 60, priority: 1 })
+    ]);
+    Core.setCheckin(state, TODAY, { minutes: 120 });
+    for (const id of Core.planConflicts(state, TODAY).capacity.deferIds) Core.deferTask(state, id, TODAY);
+    assert.equal(Core.planConflicts(state, TODAY).capacity, null);
+    assert.equal(state.tasks.find((t) => t.id === "key").date, TODAY);
+  });
+});
