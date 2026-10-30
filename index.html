@@ -270,6 +270,15 @@
           </article>
         </div>
         <article class="panel">
+          <div class="panel-head"><div><p class="eyebrow">Goals</p><h3>What your actions add up to</h3></div></div>
+          <form id="goalForm" class="goal-form">
+            <input id="goalTitleInput" maxlength="80" placeholder="e.g. Land a junior developer role" aria-label="New goal name" />
+            <button class="primary-btn" type="submit">Add goal</button>
+          </form>
+          <p id="goalEmpty" class="muted">No goals yet. Add one, then link tasks to it from the task form.</p>
+          <div id="goalList" class="goal-list"></div>
+        </article>
+        <article class="panel">
           <div class="panel-head"><div><p class="eyebrow">What makes this different</p><h3>Beyond the checklist</h3></div></div>
           <div class="feature-grid">
             <div><b>Time-aware</b><span>Every task carries an estimated effort, so your day has a capacity limit.</span></div>
@@ -316,6 +325,9 @@
             <option value="high">High</option>
           </select>
         </label>
+        <label class="full">Goal
+          <select id="taskGoal"></select>
+        </label>
         <label class="full"><span>Why this matters</span><textarea id="taskNote" rows="3" maxlength="240" placeholder="Optional context or outcome"></textarea></label>
       </div>
       <div class="dialog-actions">
@@ -341,6 +353,7 @@
           <span class="meta-energy"></span>
           <span class="meta-cost"></span>
           <span class="meta-due"></span>
+          <span class="meta-goal"></span>
         </div>
       </div>
       <div class="task-actions">

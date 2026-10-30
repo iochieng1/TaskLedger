@@ -23,6 +23,8 @@ const todayISO = () => Core.localDayISO();
 
 const formatKES = (value) => `KES ${Number(value || 0).toLocaleString("en-KE")}`;
 
+const NEW_GOAL = "__new";
+
 function save() {
   if (storageLocked) return;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -112,6 +114,11 @@ function renderTaskCard(task, container) {
   due.textContent = task.date === today ? "Today" : task.date < today ? "Overdue" : formatDate(task.date);
   if (task.date < today && !task.completed) due.classList.add("overdue");
 
+  const goal = card.querySelector(".meta-goal");
+  const goalName = Core.goalTitle(state, task.goalId);
+  if (goalName) goal.textContent = `🎯 ${goalName}`;
+  else goal.remove();
+
   const editBtn = card.querySelector(".edit-task");
   editBtn.setAttribute("aria-label", `Edit "${task.title}"`);
   editBtn.addEventListener("click", () => openDialog({ task }));
@@ -172,6 +179,7 @@ function openDialog({ task = null, category = null } = {}) {
   $("#taskCost").value = task ? task.cost : 0;
   $("#taskEnergy").value = task ? task.energy : "medium";
   $("#taskNote").value = task ? task.note : "";
+  renderGoalOptions(task ? task.goalId : null);
 
   $("#taskDialog").showModal();
   setTimeout(() => $("#taskTitle").focus(), 0);
@@ -187,13 +195,97 @@ function submitTask(event) {
     minutes: $("#taskMinutes").value,
     cost: $("#taskCost").value,
     energy: $("#taskEnergy").value,
-    note: $("#taskNote").value
+    note: $("#taskNote").value,
+    goalId: $("#taskGoal").value
   };
   if (editingId) Core.updateTask(state, editingId, input);
   else Core.addTask(state, input);
   save();
   $("#taskDialog").close();
   renderAll();
+}
+
+function renderGoalOptions(selectedId) {
+  const select = $("#taskGoal");
+  select.innerHTML = "";
+  const add = (value, label) => {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    select.appendChild(option);
+  };
+  add("", "No goal");
+  for (const goal of state.goals) {
+    if (!goal.archived || goal.id === selectedId) add(goal.id, goal.archived ? `${goal.title} (archived)` : goal.title);
+  }
+  add(NEW_GOAL, "+ New goal…");
+  select.value = selectedId || "";
+  select.dataset.previous = select.value;
+}
+
+function onGoalSelect() {
+  const select = $("#taskGoal");
+  if (select.value !== NEW_GOAL) {
+    select.dataset.previous = select.value;
+    return;
+  }
+  const goal = Core.addGoal(state, prompt("Name the goal this task moves forward:") || "");
+  if (!goal) {
+    select.value = select.dataset.previous || "";
+    return;
+  }
+  save();
+  renderGoals();
+  renderGoalOptions(goal.id);
+}
+
+function renderGoals() {
+  const list = $("#goalList");
+  list.innerHTML = "";
+  const summaries = Core.goalSummaries(state).sort((a, b) => Number(a.goal.archived) - Number(b.goal.archived));
+  $("#goalEmpty").classList.toggle("hidden", summaries.length > 0);
+
+  for (const { goal, open, done, doneMinutes } of summaries) {
+    const row = document.createElement("div");
+    row.className = "goal-row";
+    if (goal.archived) row.classList.add("archived");
+
+    const text = document.createElement("div");
+    const title = document.createElement("strong");
+    title.textContent = goal.archived ? `${goal.title} (archived)` : goal.title;
+    const meta = document.createElement("small");
+    meta.textContent = `${open} open · ${done} done · ${doneMinutes} min invested`;
+    text.append(title, meta);
+
+    const actions = document.createElement("div");
+    actions.className = "goal-row-actions";
+    const rename = document.createElement("button");
+    rename.className = "secondary-btn";
+    rename.type = "button";
+    rename.textContent = "Rename";
+    rename.setAttribute("aria-label", `Rename goal "${goal.title}"`);
+    rename.addEventListener("click", () => {
+      const next = prompt("Rename goal:", goal.title);
+      if (next !== null && Core.renameGoal(state, goal.id, next)) {
+        save();
+        renderAll();
+      }
+    });
+    const archive = document.createElement("button");
+    archive.className = "secondary-btn";
+    archive.type = "button";
+    archive.textContent = goal.archived ? "Restore" : "Archive";
+    archive.setAttribute("aria-label", `${goal.archived ? "Restore" : "Archive"} goal "${goal.title}"`);
+    archive.addEventListener("click", () => {
+      Core.setGoalArchived(state, goal.id, !goal.archived);
+      save();
+      renderAll();
+    });
+    actions.append(rename, archive);
+
+    row.append(text, actions);
+    list.appendChild(row);
+  }
 }
 
 function renderDashboard() {
@@ -317,6 +409,7 @@ function renderAll() {
   renderStudy();
   renderFitness();
   renderInsights();
+  renderGoals();
   applyTheme();
 }
 
@@ -413,6 +506,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
   $("#taskFilter").addEventListener("change", renderTasks);
   $("#taskForm").addEventListener("submit", submitTask);
+  $("#taskGoal").addEventListener("change", onGoalSelect);
+  $("#goalForm").addEventListener("submit", (e) => {
+    e.preventDefault();
+    if (Core.addGoal(state, $("#goalTitleInput").value)) {
+      $("#goalTitleInput").value = "";
+      save();
+      renderAll();
+    }
+  });
   $("#closeDialog").addEventListener("click", () => $("#taskDialog").close());
   $("#cancelDialog").addEventListener("click", () => $("#taskDialog").close());
   $("#taskDialog").addEventListener("close", () => { editingId = null; });

@@ -71,10 +71,12 @@ describe("task CRUD and persistence", () => {
 
   test("update keeps the id and completion state and changes every editable field", () => {
     const original = task({ id: "a", completed: true, completedAt: completedAtLocal(2026, 10, 30) });
+    const before = { ...original };
     const state = stateWith([original]);
-    Core.updateTask(state, "a", { title: "Renamed", category: "finance", priority: 1, date: "2026-11-02", minutes: 15, cost: 200, energy: "low", note: "why" });
+    const goal = Core.addGoal(state, "Ship it");
+    Core.updateTask(state, "a", { title: "Renamed", category: "finance", priority: 1, date: "2026-11-02", minutes: 15, cost: 200, energy: "low", note: "why", goalId: goal.id });
     const [saved] = refresh(state).tasks;
-    assert.deepEqual(saved, { ...original, title: "Renamed", category: "finance", priority: 1, date: "2026-11-02", minutes: 15, cost: 200, energy: "low", note: "why" });
+    assert.deepEqual(saved, { ...before, title: "Renamed", category: "finance", priority: 1, date: "2026-11-02", minutes: 15, cost: 200, energy: "low", note: "why", goalId: goal.id });
   });
 
   test("update of an unknown id changes nothing", () => {
@@ -280,5 +282,107 @@ describe("study focus minutes", () => {
       focusMinutes: 10
     }));
     assert.equal(result.state.timerFocusMinutes, 0);
+  });
+});
+
+describe("goals", () => {
+  test("fresh state has no goals", () => {
+    assert.deepEqual(Core.emptyState().goals, []);
+  });
+
+  test("adding trims the title and reuses an active goal with the same name", () => {
+    const state = Core.emptyState();
+    const goal = Core.addGoal(state, "  Get a dev job ");
+    assert.equal(goal.title, "Get a dev job");
+    assert.equal(Core.addGoal(state, "get a DEV job"), goal);
+    assert.equal(state.goals.length, 1);
+    assert.equal(Core.addGoal(state, "   "), null);
+  });
+
+  test("an archived goal's name can be reused for a new goal", () => {
+    const state = Core.emptyState();
+    const old = Core.addGoal(state, "Run 5k");
+    Core.setGoalArchived(state, old.id, true);
+    const again = Core.addGoal(state, "Run 5k");
+    assert.notEqual(again.id, old.id);
+    assert.deepEqual(Core.activeGoals(state), [again]);
+  });
+
+  test("rename keeps the id and rejects empty titles", () => {
+    const state = Core.emptyState();
+    const goal = Core.addGoal(state, "Save");
+    Core.renameGoal(state, goal.id, "Save KES 5,000");
+    assert.equal(Core.goalTitle(state, goal.id), "Save KES 5,000");
+    assert.equal(Core.renameGoal(state, goal.id, " "), null);
+    assert.equal(goal.title, "Save KES 5,000");
+  });
+
+  test("tasks link to existing goals only", () => {
+    const state = Core.emptyState();
+    const goal = Core.addGoal(state, "Learn Go");
+    assert.equal(Core.addTask(state, { title: "Tour of Go", goalId: goal.id }).goalId, goal.id);
+    assert.equal(Core.addTask(state, { title: "Typo", goalId: "nope" }).goalId, null);
+    assert.equal(Core.addTask(state, { title: "None" }).goalId, null);
+  });
+
+  test("archiving a goal keeps its tasks linked", () => {
+    const state = Core.emptyState();
+    const goal = Core.addGoal(state, "Learn Go");
+    const t = Core.addTask(state, { title: "Tour of Go", goalId: goal.id });
+    Core.setGoalArchived(state, goal.id, true);
+    assert.equal(t.goalId, goal.id);
+    assert.equal(Core.goalTitle(state, goal.id), "Learn Go");
+  });
+
+  test("editing a task can unlink it from its goal", () => {
+    const state = Core.emptyState();
+    const goal = Core.addGoal(state, "Learn Go");
+    const t = Core.addTask(state, { title: "Tour of Go", goalId: goal.id });
+    Core.updateTask(state, t.id, { ...t, goalId: "" });
+    assert.equal(t.goalId, null);
+  });
+
+  test("summaries count open and done work per goal", () => {
+    const state = Core.emptyState();
+    const goal = Core.addGoal(state, "Learn Go");
+    const a = Core.addTask(state, { title: "A", minutes: 30, goalId: goal.id });
+    Core.addTask(state, { title: "B", minutes: 45, goalId: goal.id });
+    Core.addTask(state, { title: "Unlinked" });
+    Core.toggleTask(state, a.id);
+    const [summary] = Core.goalSummaries(state);
+    assert.equal(summary.goal, goal);
+    assert.equal(summary.open, 1);
+    assert.equal(summary.done, 1);
+    assert.equal(summary.doneMinutes, 30);
+  });
+
+  test("goals and links survive a refresh", () => {
+    const state = Core.emptyState();
+    const goal = Core.addGoal(state, "Learn Go");
+    Core.setGoalArchived(state, Core.addGoal(state, "Old").id, true);
+    Core.addTask(state, { title: "Tour of Go", goalId: goal.id });
+    const loaded = refresh(state);
+    assert.deepEqual(loaded.goals, state.goals);
+    assert.equal(loaded.tasks[0].goalId, goal.id);
+  });
+
+  test("saves from before goals existed load with no goals and unlinked tasks", () => {
+    const result = Core.parseState(JSON.stringify({ tasks: [{ title: "Old task" }] }));
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.state.goals, []);
+    assert.equal(result.state.tasks[0].goalId, null);
+  });
+
+  test("a goal without a title rejects the whole state", () => {
+    assert.equal(Core.parseState(JSON.stringify({ goals: [{ id: "g" }] })).ok, false);
+    assert.equal(Core.parseState(JSON.stringify({ goals: "nope" })).ok, false);
+  });
+
+  test("demo data links tasks to demo goals", () => {
+    const demo = Core.demoState(TODAY);
+    const ids = new Set(demo.goals.map((g) => g.id));
+    assert.ok(demo.goals.length > 0);
+    assert.ok(demo.tasks.some((t) => ids.has(t.goalId)));
+    assert.ok(demo.tasks.every((t) => t.goalId === null || ids.has(t.goalId)));
   });
 });

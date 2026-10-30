@@ -39,6 +39,7 @@ Every task can carry five dimensions:
 - **Today dashboard** — daily execution capacity, planned minutes, savings progress, completed tasks, focus minutes, planned spending, current streak, smart task queue
 - **Smart task queue** — sorted by completion state, due date, priority, then estimated duration
 - **Task editing** — every task card has an edit action; changes keep the task's id and completion state
+- **Goals** — name the outcomes you're working toward, link tasks to them from the task form, and track open/done work per goal in Insights; archiving a goal keeps its history
 - **Money dashboard** — monthly income, savings target, current savings, planned task spending, estimated available money
 - **Study mode** — dedicated queue, workload, completion percentage, 25-minute focus timer, focus-minute tracking
 - **Fitness mode** — planned sessions, completed workouts, workout minutes, average task energy
@@ -119,12 +120,14 @@ All state lives in `localStorage["taskledger-v1"]`:
 ```javascript
 {
   tasks: [],
+  goals: [],
   money: { income: 0, target: 0, current: 0 },
   theme: "light",
   timerFocusMinutes: 0
 }
 ```
 
+- **Goals** are `{ id, title, archived }`. A task's optional `goalId` points at one goal. Archived goals disappear from the picker for new tasks but stay linked to existing ones. Saves from before goals existed load with an empty goal list.
 - **Focus minutes** shown on the dashboard are `timerFocusMinutes` (completed focus-timer sessions) plus the minutes of completed study tasks. The study share is calculated, not stored, so completing, undoing, editing or deleting a study task always keeps the total consistent. Older saves with a single `focusMinutes` total are migrated automatically.
 - **Streaks** count consecutive local calendar days with at least one completion, including today.
 - **Unreadable data:** if the saved value can't be parsed or validated, TaskLedger leaves it untouched, stops saving, and shows a banner. **Download saved data** saves the raw value; **Start fresh** keeps a backup copy under `taskledger-v1-unreadable-<timestamp>` before starting empty.
