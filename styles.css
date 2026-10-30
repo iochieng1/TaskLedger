@@ -127,6 +127,15 @@ p { margin: 0; }
 .task-actions .icon-btn { width: 34px; height: 34px; }
 .recovery-banner { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; justify-content: space-between; margin-bottom: 20px; padding: 14px 16px; border: 1px solid var(--red); border-radius: var(--radius); background: var(--surface); color: var(--text); }
 .recovery-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.meta-goal { color: var(--accent); font-weight: 600; }
+.goal-form { display: flex; gap: 10px; margin-bottom: 14px; }
+.goal-form input { flex: 1; min-width: 0; }
+.goal-list { display: grid; gap: 10px; }
+.goal-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; }
+.goal-row.archived { opacity: .6; }
+.goal-row small { display: block; color: var(--muted); margin-top: 3px; }
+.goal-row-actions { display: flex; gap: 8px; }
+.goal-row-actions .secondary-btn { padding: 6px 10px; font-size: 13px; }
 .tag { font-size: 9px; text-transform: uppercase; letter-spacing: .08em; border-radius: 99px; padding: 5px 7px; font-weight: 800; background: var(--surface-2); color: var(--muted); }
 .tag.study { background: #eaf0ff; color: #356ae6; }
 .tag.finance { background: #e6f7ef; color: #0f8b62; }

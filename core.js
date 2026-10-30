@@ -26,6 +26,7 @@
   function emptyState() {
     return {
       tasks: [],
+      goals: [],
       money: { income: 0, target: 0, current: 0 },
       theme: "light",
       timerFocusMinutes: 0
@@ -34,13 +35,17 @@
 
   function demoState(today = localDayISO()) {
     const tomorrow = addDays(today, 1);
+    const job = { id: uid(), title: "Land a junior developer role", archived: false };
+    const fund = { id: uid(), title: "Build a KES 5,000 emergency fund", archived: false };
+    const fit = { id: uid(), title: "Stay active every week", archived: false };
     return {
       ...emptyState(),
+      goals: [job, fund, fit],
       tasks: [
-        { id: uid(), title: "Finish JavaScript array exercises", category: "study", priority: 3, date: today, minutes: 60, cost: 0, energy: "high", note: "Complete the tests, then push to GitHub.", completed: false, completedAt: null },
-        { id: uid(), title: "Save KES 500 toward monthly target", category: "finance", priority: 3, date: today, minutes: 10, cost: 0, energy: "low", note: "Transfer the planned amount before spending.", completed: false, completedAt: null },
-        { id: uid(), title: "30-minute home workout", category: "fitness", priority: 2, date: today, minutes: 30, cost: 0, energy: "medium", note: "Push-ups, squats, lunges and core.", completed: false, completedAt: null },
-        { id: uid(), title: "Buy lunch", category: "personal", priority: 1, date: tomorrow, minutes: 10, cost: 150, energy: "low", note: "Keep it within the daily food budget.", completed: false, completedAt: null }
+        { id: uid(), title: "Finish JavaScript array exercises", category: "study", priority: 3, date: today, minutes: 60, cost: 0, energy: "high", note: "Complete the tests, then push to GitHub.", goalId: job.id, completed: false, completedAt: null },
+        { id: uid(), title: "Save KES 500 toward monthly target", category: "finance", priority: 3, date: today, minutes: 10, cost: 0, energy: "low", note: "Transfer the planned amount before spending.", goalId: fund.id, completed: false, completedAt: null },
+        { id: uid(), title: "30-minute home workout", category: "fitness", priority: 2, date: today, minutes: 30, cost: 0, energy: "medium", note: "Push-ups, squats, lunges and core.", goalId: fit.id, completed: false, completedAt: null },
+        { id: uid(), title: "Buy lunch", category: "personal", priority: 1, date: tomorrow, minutes: 10, cost: 150, energy: "low", note: "Keep it within the daily food budget.", goalId: null, completed: false, completedAt: null }
       ],
       money: { income: 30000, target: 5000, current: 1200 }
     };
@@ -63,6 +68,7 @@
       cost: Math.max(0, toNumber(raw.cost, 0)),
       energy: ENERGY_LEVELS.includes(raw.energy) ? raw.energy : "medium",
       note: typeof raw.note === "string" ? raw.note : "",
+      goalId: typeof raw.goalId === "string" && raw.goalId ? raw.goalId : null,
       completed,
       completedAt: completed && typeof raw.completedAt === "string" && !Number.isNaN(Date.parse(raw.completedAt))
         ? raw.completedAt
@@ -81,6 +87,21 @@
     if (parsed.tasks !== undefined && !Array.isArray(parsed.tasks)) {
       return { ok: false, reason: "The saved task list is not a list." };
     }
+    if (parsed.goals !== undefined && !Array.isArray(parsed.goals)) {
+      return { ok: false, reason: "The saved goal list is not a list." };
+    }
+
+    const goals = [];
+    for (const [i, rawGoal] of (parsed.goals || []).entries()) {
+      if (!isObject(rawGoal) || typeof rawGoal.title !== "string" || !rawGoal.title.trim()) {
+        return { ok: false, reason: `Saved goal #${i + 1} is missing a title or is malformed.` };
+      }
+      goals.push({
+        id: typeof rawGoal.id === "string" && rawGoal.id ? rawGoal.id : uid(),
+        title: rawGoal.title.trim(),
+        archived: Boolean(rawGoal.archived)
+      });
+    }
 
     const tasks = [];
     for (const [i, rawTask] of (parsed.tasks || []).entries()) {
@@ -92,6 +113,7 @@
     const money = isObject(parsed.money) ? parsed.money : {};
     const state = {
       tasks,
+      goals,
       money: {
         income: Math.max(0, toNumber(money.income, 0)),
         target: Math.max(0, toNumber(money.target, 0)),
@@ -120,7 +142,7 @@
     return Number(state.timerFocusMinutes || 0) + completedStudyMinutes(state.tasks);
   }
 
-  function taskFields(input) {
+  function taskFields(state, input) {
     return {
       title: String(input.title || "").trim(),
       category: CATEGORIES.includes(input.category) ? input.category : "personal",
@@ -129,12 +151,13 @@
       minutes: Math.max(0, toNumber(input.minutes, 30)),
       cost: Math.max(0, toNumber(input.cost, 0)),
       energy: ENERGY_LEVELS.includes(input.energy) ? input.energy : "medium",
-      note: String(input.note || "").trim()
+      note: String(input.note || "").trim(),
+      goalId: state.goals.some((g) => g.id === input.goalId) ? input.goalId : null
     };
   }
 
   function addTask(state, input) {
-    const task = { id: uid(), ...taskFields(input), completed: false, completedAt: null };
+    const task = { id: uid(), ...taskFields(state, input), completed: false, completedAt: null };
     state.tasks.push(task);
     return task;
   }
@@ -142,7 +165,7 @@
   function updateTask(state, id, input) {
     const task = state.tasks.find((t) => t.id === id);
     if (!task) return null;
-    Object.assign(task, taskFields(input));
+    Object.assign(task, taskFields(state, input));
     return task;
   }
 
@@ -158,6 +181,53 @@
     const before = state.tasks.length;
     state.tasks = state.tasks.filter((t) => t.id !== id);
     return state.tasks.length < before;
+  }
+
+  function addGoal(state, title) {
+    const clean = String(title || "").trim();
+    if (!clean) return null;
+    const existing = state.goals.find((g) => !g.archived && g.title.toLowerCase() === clean.toLowerCase());
+    if (existing) return existing;
+    const goal = { id: uid(), title: clean, archived: false };
+    state.goals.push(goal);
+    return goal;
+  }
+
+  function renameGoal(state, id, title) {
+    const goal = state.goals.find((g) => g.id === id);
+    const clean = String(title || "").trim();
+    if (!goal || !clean) return null;
+    goal.title = clean;
+    return goal;
+  }
+
+  function setGoalArchived(state, id, archived) {
+    const goal = state.goals.find((g) => g.id === id);
+    if (!goal) return null;
+    goal.archived = Boolean(archived);
+    return goal;
+  }
+
+  function activeGoals(state) {
+    return state.goals.filter((g) => !g.archived);
+  }
+
+  function goalTitle(state, goalId) {
+    const goal = state.goals.find((g) => g.id === goalId);
+    return goal ? goal.title : null;
+  }
+
+  function goalSummaries(state) {
+    return state.goals.map((goal) => {
+      const linked = state.tasks.filter((t) => t.goalId === goal.id);
+      const done = linked.filter((t) => t.completed);
+      return {
+        goal,
+        open: linked.length - done.length,
+        done: done.length,
+        doneMinutes: done.reduce((sum, t) => sum + Number(t.minutes || 0), 0)
+      };
+    });
   }
 
   function smartSort(a, b) {
@@ -224,6 +294,12 @@
     updateTask,
     toggleTask,
     deleteTask,
+    addGoal,
+    renameGoal,
+    setGoalArchived,
+    activeGoals,
+    goalTitle,
+    goalSummaries,
     smartSort,
     daySummary,
     financeSummary,
