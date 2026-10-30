@@ -38,7 +38,8 @@
       </div>
 
       <button id="exportBtn" class="sidebar-action">Export my data</button>
-      <button id="resetBtn" class="sidebar-action danger">Reset demo data</button>
+      <button id="demoBtn" class="sidebar-action">Load demo data</button>
+      <button id="resetBtn" class="sidebar-action danger">Clear all data</button>
     </aside>
 
     <main class="main">
@@ -53,6 +54,18 @@
           <button id="openTaskBtn" class="primary-btn">+ Add task</button>
         </div>
       </header>
+
+      <div id="recoveryBanner" class="recovery-banner hidden" role="alert">
+        <div>
+          <strong>Your saved data couldn't be read.</strong>
+          <span id="recoveryReason"></span>
+          Nothing has been deleted. Changes you make now won't be saved until you choose an option.
+        </div>
+        <div class="recovery-actions">
+          <button id="downloadRawBtn" class="secondary-btn" type="button">Download saved data</button>
+          <button id="startFreshBtn" class="secondary-btn" type="button">Start fresh</button>
+        </div>
+      </div>
 
       <section id="todayView" class="view active-view">
         <div class="hero-grid">
@@ -272,7 +285,7 @@
   <dialog id="taskDialog" class="dialog">
     <form id="taskForm" method="dialog">
       <div class="dialog-head">
-        <div><p class="eyebrow">New action</p><h2>What needs to happen?</h2></div>
+        <div><p class="eyebrow" id="dialogEyebrow">New action</p><h2 id="dialogTitle">What needs to happen?</h2></div>
         <button type="button" class="icon-btn" id="closeDialog" aria-label="Close dialog">×</button>
       </div>
       <div class="form-grid">
@@ -307,7 +320,7 @@
       </div>
       <div class="dialog-actions">
         <button type="button" class="secondary-btn" id="cancelDialog">Cancel</button>
-        <button type="submit" class="primary-btn">Add task</button>
+        <button type="submit" class="primary-btn" id="dialogSubmit">Add task</button>
       </div>
     </form>
   </dialog>
@@ -331,11 +344,13 @@
         </div>
       </div>
       <div class="task-actions">
+        <button class="icon-btn edit-task" title="Edit task" aria-label="Edit task">✎</button>
         <button class="icon-btn delete-task" title="Delete task" aria-label="Delete task">⌫</button>
       </div>
     </article>
   </template>
 
+  <script src="core.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

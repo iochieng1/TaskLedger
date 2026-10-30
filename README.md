@@ -38,11 +38,12 @@ Every task can carry five dimensions:
 
 - **Today dashboard** — daily execution capacity, planned minutes, savings progress, completed tasks, focus minutes, planned spending, current streak, smart task queue
 - **Smart task queue** — sorted by completion state, due date, priority, then estimated duration
+- **Task editing** — every task card has an edit action; changes keep the task's id and completion state
 - **Money dashboard** — monthly income, savings target, current savings, planned task spending, estimated available money
 - **Study mode** — dedicated queue, workload, completion percentage, 25-minute focus timer, focus-minute tracking
 - **Fitness mode** — planned sessions, completed workouts, workout minutes, average task energy
 - **Insights** — a lightweight execution score (completion rate, priority completion, streak consistency) and a plain-language reality check when the plan is overloaded
-- **Personalization** — light/dark mode, responsive layout, local persistence, JSON export
+- **Personalization** — light/dark mode, responsive layout, local persistence, JSON export, opt-in demo data
 
 See `PRD.md` §6–§7 for the full functional requirements and acceptance criteria behind each of these.
 
@@ -62,7 +63,11 @@ See `PRD.md` §6–§7 for the full functional requirements and acceptance crite
 taskledger/
 ├── index.html   # structure, views, dialogs, task template
 ├── styles.css   # layout, dashboard/task cards, dark mode, breakpoints
-├── app.js       # state, persistence, CRUD, sorting, dashboard/finance/study/fitness calculations, timer, export
+├── core.js      # pure logic: state parsing/migration, CRUD, sorting, capacity, finance, streaks, focus minutes
+├── app.js       # DOM rendering, persistence, dialogs, timer, export, recovery
+├── tests/       # Node test suite for core.js
+├── package.json # `npm test` script (no dependencies)
+├── .github/workflows/ci.yml
 ├── README.md    # this file
 ├── PRD.md       # full product specification
 └── .gitignore
@@ -85,6 +90,26 @@ python3 -m http.server 5500
 
 Then open `http://localhost:5500`.
 
+A new install starts empty. Use **Load demo data** in the sidebar to explore with sample tasks.
+
+---
+
+## Running the checks
+
+The tests use Node's built-in test runner, so there is nothing to install (Node 18+):
+
+```bash
+npm test
+```
+
+Streaks depend on the local calendar day, so it's worth running them in another timezone too:
+
+```bash
+TZ=America/Los_Angeles npm test
+```
+
+CI runs the same suite on every push and pull request, across UTC, Africa/Nairobi, America/Los_Angeles and Pacific/Kiritimati.
+
 ---
 
 ## How data works
@@ -96,9 +121,14 @@ All state lives in `localStorage["taskledger-v1"]`:
   tasks: [],
   money: { income: 0, target: 0, current: 0 },
   theme: "light",
-  focusMinutes: 0
+  timerFocusMinutes: 0
 }
 ```
+
+- **Focus minutes** shown on the dashboard are `timerFocusMinutes` (completed focus-timer sessions) plus the minutes of completed study tasks. The study share is calculated, not stored, so completing, undoing, editing or deleting a study task always keeps the total consistent. Older saves with a single `focusMinutes` total are migrated automatically.
+- **Streaks** count consecutive local calendar days with at least one completion, including today.
+- **Unreadable data:** if the saved value can't be parsed or validated, TaskLedger leaves it untouched, stops saving, and shows a banner. **Download saved data** saves the raw value; **Start fresh** keeps a backup copy under `taskledger-v1-unreadable-<timestamp>` before starting empty.
+- **Clear all data** and **Load demo data** in the sidebar both ask for confirmation first.
 
 That makes the MVP backend-free, private by default, and easy to reset — but data does not sync between devices. Cloud sync is Phase 3 in `PRD.md`.
 

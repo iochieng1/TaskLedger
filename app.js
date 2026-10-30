@@ -1,14 +1,16 @@
-const STORAGE_KEY = "taskledger-v1";
-const DAILY_CAPACITY_MINUTES = 360; // six-hour default execution budget
-const FOCUS_SESSION_SECONDS = 25 * 60; // Pomodoro focus block
-const BREAK_SECONDS = 5 * 60; // short break after a focus session
+const Core = window.TaskLedgerCore;
 
-const state = {
-  tasks: [],
-  money: { income: 0, target: 0, current: 0 },
-  theme: "light",
-  focusMinutes: 0
-};
+const STORAGE_KEY = "taskledger-v1";
+const DAILY_CAPACITY_MINUTES = Core.DAILY_CAPACITY_MINUTES;
+const FOCUS_SESSION_SECONDS = 25 * 60;
+const BREAK_SECONDS = 5 * 60;
+
+const state = Core.emptyState();
+
+let storageLocked = false;
+let unreadableRaw = null;
+
+let editingId = null;
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -17,57 +19,43 @@ const categoryNames = {
   study: "Study", finance: "Money", fitness: "Fitness", work: "Work", personal: "Personal"
 };
 
-const todayISO = () => {
-  const d = new Date();
-  const localDate = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
-  return localDate.toISOString().slice(0, 10);
-};
+const todayISO = () => Core.localDayISO();
 
 const formatKES = (value) => `KES ${Number(value || 0).toLocaleString("en-KE")}`;
 
-function uid() {
-  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
-
 function save() {
+  if (storageLocked) return;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
 function load() {
   const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) {
-    seedDemo();
+  if (raw === null) return;
+  const result = Core.parseState(raw);
+  if (result.ok) {
+    Object.assign(state, result.state);
     return;
   }
-  try {
-    const parsed = JSON.parse(raw);
-    Object.assign(state, parsed);
-    state.tasks = Array.isArray(parsed.tasks) ? parsed.tasks : [];
-    state.money = parsed.money || { income: 0, target: 0, current: 0 };
-    state.theme = parsed.theme || "light";
-  } catch {
-    // Saved data exists but isn't valid JSON. Don't overwrite it with demo
-    // data silently — tell the user first, since this discards their tasks.
-    alert("Your saved TaskLedger data couldn't be read and will be reset to the demo state. If this keeps happening, use Export to back up your data first.");
-    seedDemo();
-  }
+  storageLocked = true;
+  unreadableRaw = raw;
+  $("#recoveryReason").textContent = result.reason;
+  $("#recoveryBanner").classList.remove("hidden");
 }
 
-function seedDemo() {
-  const t = todayISO();
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const tomorrowISO = tomorrow.toISOString().slice(0, 10);
-
-  state.tasks = [
-    { id: uid(), title: "Finish JavaScript array exercises", category: "study", priority: 3, date: t, minutes: 60, cost: 0, energy: "high", note: "Complete the tests, then push to GitHub.", completed: false, completedAt: null },
-    { id: uid(), title: "Save KES 500 toward monthly target", category: "finance", priority: 3, date: t, minutes: 10, cost: 0, energy: "low", note: "Transfer the planned amount before spending.", completed: false, completedAt: null },
-    { id: uid(), title: "30-minute home workout", category: "fitness", priority: 2, date: t, minutes: 30, cost: 0, energy: "medium", note: "Push-ups, squats, lunges and core.", completed: false, completedAt: null },
-    { id: uid(), title: "Buy lunch", category: "personal", priority: 1, date: tomorrowISO, minutes: 10, cost: 150, energy: "low", note: "Keep it within the daily food budget.", completed: false, completedAt: null }
-  ];
-  state.money = { income: 30000, target: 5000, current: 1200 };
-  state.theme = "light";
+function replaceState(next) {
+  if (storageLocked) {
+    try {
+      localStorage.setItem(`${STORAGE_KEY}-unreadable-${Date.now()}`, unreadableRaw);
+    } catch {
+    }
+    storageLocked = false;
+    unreadableRaw = null;
+    $("#recoveryBanner").classList.add("hidden");
+  }
+  Object.keys(state).forEach((key) => delete state[key]);
+  Object.assign(state, next);
   save();
+  renderAll();
 }
 
 function applyTheme() {
@@ -89,13 +77,6 @@ function setGreeting() {
 
 function priorityLabel(p) {
   return Number(p) === 3 ? "High" : Number(p) === 2 ? "Medium" : "Low";
-}
-
-function smartSort(a, b) {
-  if (a.completed !== b.completed) return Number(a.completed) - Number(b.completed);
-  if (a.date !== b.date) return a.date.localeCompare(b.date);
-  if (Number(a.priority) !== Number(b.priority)) return Number(b.priority) - Number(a.priority);
-  return Number(a.minutes) - Number(b.minutes);
 }
 
 function renderTaskCard(task, container) {
@@ -131,6 +112,10 @@ function renderTaskCard(task, container) {
   due.textContent = task.date === today ? "Today" : task.date < today ? "Overdue" : formatDate(task.date);
   if (task.date < today && !task.completed) due.classList.add("overdue");
 
+  const editBtn = card.querySelector(".edit-task");
+  editBtn.setAttribute("aria-label", `Edit "${task.title}"`);
+  editBtn.addEventListener("click", () => openDialog({ task }));
+
   const deleteBtn = card.querySelector(".delete-task");
   deleteBtn.setAttribute("aria-label", `Delete "${task.title}"`);
   deleteBtn.addEventListener("click", () => deleteTask(task.id));
@@ -140,11 +125,9 @@ function renderTaskCard(task, container) {
 function renderTasks() {
   const filter = $("#taskFilter").value;
   const today = todayISO();
-  // "Today" means due today or overdue — future-dated tasks belong to their
-  // own day and shouldn't clutter today's queue.
   let tasks = state.tasks.filter(t => t.date <= today);
   if (filter !== "all") tasks = tasks.filter(t => t.category === filter);
-  tasks.sort(smartSort);
+  tasks.sort(Core.smartSort);
 
   $("#taskList").innerHTML = "";
   tasks.forEach(t => renderTaskCard(t, $("#taskList")));
@@ -158,110 +141,96 @@ function renderTasks() {
   for (const [sel, cat] of lists) {
     const box = $(sel);
     box.innerHTML = "";
-    state.tasks.filter(t => t.category === cat).sort(smartSort).forEach(t => renderTaskCard(t, box));
+    state.tasks.filter(t => t.category === cat).sort(Core.smartSort).forEach(t => renderTaskCard(t, box));
   }
 }
 
 function toggleTask(id) {
-  const task = state.tasks.find(t => t.id === id);
-  if (!task) return;
-  
-  const wasCompleted = task.completed;
-  task.completed = !task.completed;
-  task.completedAt = task.completed ? new Date().toISOString() : null;
-  
-  if (task.category === "study") {
-    const minuteChange = Number(task.minutes || 0);
-    if (task.completed && !wasCompleted) {
-      state.focusMinutes += minuteChange;
-    } else if (!task.completed && wasCompleted) {
-      state.focusMinutes -= minuteChange;
-    }
-  }
-  
+  if (!Core.toggleTask(state, id)) return;
   save();
   renderAll();
 }
 
 function deleteTask(id) {
-  state.tasks = state.tasks.filter(t => t.id !== id);
+  if (!Core.deleteTask(state, id)) return;
   save();
   renderAll();
 }
 
-function openDialog(prefillCategory = null) {
+function openDialog({ task = null, category = null } = {}) {
+  editingId = task ? task.id : null;
   $("#taskForm").reset();
-  $("#taskDate").value = todayISO();
-  if (prefillCategory) $("#taskCategory").value = prefillCategory;
-  $("#taskMinutes").value = 30;
-  $("#taskCost").value = 0;
-  $("#taskEnergy").value = "medium";
+  $("#dialogEyebrow").textContent = task ? "Edit action" : "New action";
+  $("#dialogTitle").textContent = task ? "Update this task" : "What needs to happen?";
+  $("#dialogSubmit").textContent = task ? "Save changes" : "Add task";
+
+  $("#taskTitle").value = task ? task.title : "";
+  $("#taskCategory").value = task ? task.category : category || "study";
+  $("#taskPriority").value = String(task ? task.priority : 2);
+  $("#taskDate").value = task ? task.date : todayISO();
+  $("#taskMinutes").value = task ? task.minutes : 30;
+  $("#taskCost").value = task ? task.cost : 0;
+  $("#taskEnergy").value = task ? task.energy : "medium";
+  $("#taskNote").value = task ? task.note : "";
+
   $("#taskDialog").showModal();
   setTimeout(() => $("#taskTitle").focus(), 0);
 }
 
-function addTask(event) {
+function submitTask(event) {
   event.preventDefault();
-  const task = {
-    id: uid(),
-    title: $("#taskTitle").value.trim(),
+  const input = {
+    title: $("#taskTitle").value,
     category: $("#taskCategory").value,
-    priority: Number($("#taskPriority").value),
-    date: $("#taskDate").value || todayISO(),
-    minutes: Number($("#taskMinutes").value || 30),
-    cost: Number($("#taskCost").value || 0),
+    priority: $("#taskPriority").value,
+    date: $("#taskDate").value,
+    minutes: $("#taskMinutes").value,
+    cost: $("#taskCost").value,
     energy: $("#taskEnergy").value,
-    note: $("#taskNote").value.trim(),
-    completed: false,
-    completedAt: null
+    note: $("#taskNote").value
   };
-  state.tasks.push(task);
+  if (editingId) Core.updateTask(state, editingId, input);
+  else Core.addTask(state, input);
   save();
   $("#taskDialog").close();
   renderAll();
 }
 
 function renderDashboard() {
-  const today = todayISO();
-  const todayTasks = state.tasks.filter(t => t.date === today);
-  const done = todayTasks.filter(t => t.completed);
-  const plannedMinutes = todayTasks.filter(t => !t.completed).reduce((sum, t) => sum + Number(t.minutes || 0), 0);
-  const plannedSpend = todayTasks.filter(t => !t.completed).reduce((sum, t) => sum + Number(t.cost || 0), 0);
-  const capacity = Math.min(100, Math.round((plannedMinutes / DAILY_CAPACITY_MINUTES) * 100));
+  const day = Core.daySummary(state.tasks, todayISO());
+  const money = Core.financeSummary(state.money, state.tasks);
 
-  $("#capacityHeadline").textContent = `${plannedMinutes} / ${DAILY_CAPACITY_MINUTES} min planned`;
-  $("#capacityText").textContent = plannedMinutes > DAILY_CAPACITY_MINUTES
+  $("#capacityHeadline").textContent = `${day.plannedMinutes} / ${DAILY_CAPACITY_MINUTES} min planned`;
+  $("#capacityText").textContent = day.overCapacity
     ? "You are over capacity. Move or remove something."
-    : plannedMinutes > DAILY_CAPACITY_MINUTES - 60
+    : day.heavy
       ? "Heavy day. Protect the highest-value work."
       : "You have room to take action.";
 
-  $("#capacityPercent").textContent = `${capacity}%`;
-  $("#capacityRing").style.background = `conic-gradient(var(--accent) ${capacity * 3.6}deg, var(--surface-2) 0deg)`;
+  $("#capacityPercent").textContent = `${day.capacityPercent}%`;
+  $("#capacityRing").style.background = `conic-gradient(var(--accent) ${day.capacityPercent * 3.6}deg, var(--surface-2) 0deg)`;
 
-  const savingPct = state.money.target ? Math.min(100, Math.round((state.money.current / state.money.target) * 100)) : 0;
   $("#savingHeadline").textContent = formatKES(state.money.current);
-  $("#savingText").textContent = state.money.target
-    ? `${formatKES(Math.max(0, state.money.target - state.money.current))} left to hit this month's target.`
+  $("#savingText").textContent = money.target
+    ? `${formatKES(money.leftToTarget)} left to hit this month's target.`
     : "Set a monthly target to give your money a job.";
-  $("#savingBar").style.width = `${savingPct}%`;
-  $("#savingPercent").textContent = `${savingPct}% of target`;
+  $("#savingBar").style.width = `${money.savingPercent}%`;
+  $("#savingPercent").textContent = `${money.savingPercent}% of target`;
 
-  $("#statCompleted").textContent = done.length;
-  $("#statFocus").textContent = state.focusMinutes;
-  $("#statSpend").textContent = formatKES(plannedSpend);
-  $("#statStreak").textContent = `${calculateStreak()} day${calculateStreak() === 1 ? "" : "s"}`;
+  const streak = Core.calculateStreak(state.tasks, todayISO());
+  $("#statCompleted").textContent = day.completedCount;
+  $("#statFocus").textContent = Core.totalFocusMinutes(state);
+  $("#statSpend").textContent = formatKES(day.plannedSpend);
+  $("#statStreak").textContent = `${streak} day${streak === 1 ? "" : "s"}`;
 }
 
 function renderBalance() {
   const allTasks = state.tasks;
   const totalTasks = allTasks.length || 1;
   const completedRatio = allTasks.filter(t => t.completed).length / totalTasks;
-  const activeToday = allTasks.filter(t => t.date === todayISO() && !t.completed);
-  const plannedMinutes = activeToday.reduce((sum, t) => sum + Number(t.minutes || 0), 0);
+  const { plannedMinutes } = Core.daySummary(allTasks, todayISO());
   const capacityRatio = Math.min(1, DAILY_CAPACITY_MINUTES / Math.max(plannedMinutes || DAILY_CAPACITY_MINUTES, DAILY_CAPACITY_MINUTES));
-  const focusRatio = Math.min(1, (state.focusMinutes || 0) / 180);
-  const spendRatio = state.money.income ? Math.min(1, (state.tasks.filter(t => !t.completed).reduce((sum, t) => sum + Number(t.cost || 0), 0) / (state.money.income * 0.2 || 1))) : 0.7;
+  const focusRatio = Math.min(1, Core.totalFocusMinutes(state) / 180);
   const score = Math.min(100, Math.round((completedRatio * 55) + (capacityRatio * 25) + (focusRatio * 20)));
 
   const badge = score >= 75 ? "Balanced" : score >= 50 ? "Watchful" : "Overloaded";
@@ -282,12 +251,11 @@ function renderFinance() {
   $("#savingsTargetInput").value = state.money.target || "";
   $("#currentSavingsInput").value = state.money.current || "";
 
-  const planned = state.tasks.filter(t => !t.completed).reduce((sum, t) => sum + Number(t.cost || 0), 0);
-  const available = Number(state.money.income || 0) - planned - Number(state.money.target || 0);
-  $("#financeAvailable").textContent = formatKES(available);
-  $("#financeIncome").textContent = formatKES(state.money.income);
-  $("#financePlanned").textContent = formatKES(planned);
-  $("#financeTarget").textContent = formatKES(state.money.target);
+  const money = Core.financeSummary(state.money, state.tasks);
+  $("#financeAvailable").textContent = formatKES(money.available);
+  $("#financeIncome").textContent = formatKES(money.income);
+  $("#financePlanned").textContent = formatKES(money.planned);
+  $("#financeTarget").textContent = formatKES(money.target);
 }
 
 function renderStudy() {
@@ -313,36 +281,16 @@ function renderFitness() {
   $("#fitnessEnergy").textContent = avg === 3 ? "High" : avg === 2 ? "Medium" : avg === 1 ? "Low" : "—";
 }
 
-function calculateStreak() {
-  const days = new Set(state.tasks
-    .filter(t => t.completedAt)
-    .map(t => t.completedAt.slice(0, 10))
-  );
-  
-  if (days.size === 0) return 0;
-  
-  let cursor = new Date();
-  cursor.setDate(cursor.getDate() - 1);
-  let streak = 0;
-  
-  while (days.has(cursor.toISOString().slice(0, 10))) {
-    streak += 1;
-    cursor.setDate(cursor.getDate() - 1);
-  }
-  
-  return streak;
-}
-
 function renderInsights() {
   const all = state.tasks;
   const done = all.filter(t => t.completed);
   const completion = all.length ? done.length / all.length : 0;
   const highDone = all.length ? done.filter(t => Number(t.priority) === 3).length / Math.max(1, all.filter(t => Number(t.priority) === 3).length) : 0;
-  const streak = calculateStreak();
+  const streak = Core.calculateStreak(all, todayISO());
   const score = Math.min(100, Math.round((completion * 65) + (Math.min(streak, 7) / 7 * 20) + (highDone * 15)));
   $("#executionScore").textContent = score;
 
-  const cats = ["study","finance","fitness","work","personal"].map(cat => {
+  const cats = Core.CATEGORIES.map(cat => {
     const rows = all.filter(t => t.category === cat);
     const pct = rows.length ? rows.filter(t => t.completed).length / rows.length : 0;
     return { cat, pct, count: rows.length };
@@ -396,7 +344,7 @@ function startTimer() {
     if (timerSeconds <= 0) {
       clearInterval(timerId);
       timerId = null;
-      state.focusMinutes += FOCUS_SESSION_SECONDS / 60;
+      state.timerFocusMinutes += FOCUS_SESSION_SECONDS / 60;
       save();
       $("#timerLabel").textContent = "Focus session complete. Nice work.";
       timerSeconds = BREAK_SECONDS;
@@ -413,22 +361,37 @@ function resetTimer() {
   renderTimer();
 }
 
-function exportData() {
-  const blob = new Blob([JSON.stringify(state, null, 2)], {type: "application/json"});
+function download(filename, text, type) {
+  const blob = new Blob([text], { type });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `taskledger-${todayISO()}.json`;
+  a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
 }
 
-function resetData() {
-  const ok = confirm("Reset TaskLedger to its demo state?");
-  if (!ok) return;
-  localStorage.removeItem(STORAGE_KEY);
-  seedDemo();
-  renderAll();
+function exportData() {
+  download(`taskledger-${todayISO()}.json`, JSON.stringify(state, null, 2), "application/json");
+}
+
+function downloadUnreadable() {
+  download(`taskledger-unreadable-${todayISO()}.txt`, unreadableRaw, "text/plain");
+}
+
+function loadDemo() {
+  const ok = confirm("Replace your current tasks and money plan with sample data? Export first if you want to keep them.");
+  if (ok) replaceState(Core.demoState(todayISO()));
+}
+
+function clearData() {
+  const ok = confirm("Delete all tasks and reset your money plan to zero? Export first if you want to keep them.");
+  if (ok) replaceState(Core.emptyState());
+}
+
+function startFresh() {
+  const ok = confirm("Start with an empty TaskLedger? The unreadable data stays in this browser as a backup copy, but TaskLedger won't use it.");
+  if (ok) replaceState(Core.emptyState());
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -440,7 +403,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $$(".nav-item").forEach(btn => btn.addEventListener("click", () => switchView(btn.dataset.view)));
   $("#openTaskBtn").addEventListener("click", () => openDialog());
   $("#emptyAddBtn").addEventListener("click", () => openDialog());
-  $$(".primary-btn[data-prefill]").forEach(btn => btn.addEventListener("click", () => openDialog(btn.dataset.prefill)));
+  $$(".primary-btn[data-prefill]").forEach(btn => btn.addEventListener("click", () => openDialog({ category: btn.dataset.prefill })));
 
   $("#themeBtn").addEventListener("click", () => {
     state.theme = state.theme === "dark" ? "light" : "dark";
@@ -449,9 +412,10 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   $("#taskFilter").addEventListener("change", renderTasks);
-  $("#taskForm").addEventListener("submit", addTask);
+  $("#taskForm").addEventListener("submit", submitTask);
   $("#closeDialog").addEventListener("click", () => $("#taskDialog").close());
   $("#cancelDialog").addEventListener("click", () => $("#taskDialog").close());
+  $("#taskDialog").addEventListener("close", () => { editingId = null; });
 
   $("#moneyForm").addEventListener("submit", (e) => {
     e.preventDefault();
@@ -465,5 +429,8 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#timerStart").addEventListener("click", startTimer);
   $("#timerReset").addEventListener("click", resetTimer);
   $("#exportBtn").addEventListener("click", exportData);
-  $("#resetBtn").addEventListener("click", resetData);
+  $("#demoBtn").addEventListener("click", loadDemo);
+  $("#resetBtn").addEventListener("click", clearData);
+  $("#downloadRawBtn").addEventListener("click", downloadUnreadable);
+  $("#startFreshBtn").addEventListener("click", startFresh);
 });
