@@ -24,6 +24,8 @@ const formatKES = (value) => `KES ${Number(value || 0).toLocaleString("en-KE")}`
 
 const NEW_GOAL = "__new";
 
+let nextUpFitsEnergyOnly = false;
+
 function save() {
   if (storageLocked) return;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -159,11 +161,15 @@ function renderNextUp() {
   if (document.activeElement !== $("#checkinMinutes")) $("#checkinMinutes").value = checkin.minutes;
 
   const minutesLeft = Math.max(0, checkin.minutes - Core.minutesDoneToday(state.tasks, today));
-  $("#nextUpSummary").textContent = `${minutesLeft} min left today · ${checkin.energy} energy. Ranked by deadline, priority, goals, energy, time and budget.`;
+  $("#nextUpSummary").textContent = nextUpFitsEnergyOnly
+    ? `${minutesLeft} min left today · showing only tasks that fit ${checkin.energy} energy.`
+    : `${minutesLeft} min left today · ${checkin.energy} energy. Ranked by deadline, priority, goals, energy, time and budget.`;
+
+  renderPlanAlerts(today);
 
   const list = $("#nextUpList");
   list.innerHTML = "";
-  const recs = Core.recommend(state, today);
+  const recs = Core.recommend(state, today, 3, { fitsEnergyOnly: nextUpFitsEnergyOnly });
   $("#nextUpEmpty").classList.toggle("hidden", recs.length > 0);
   for (const { task, reasons } of recs) {
     const root = renderTaskCard(task, list);
@@ -175,6 +181,100 @@ function renderNextUp() {
       chips.appendChild(chip);
     }
   }
+}
+
+function makeButton(label, className, onClick, ariaLabel) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = className;
+  button.textContent = label;
+  if (ariaLabel) button.setAttribute("aria-label", ariaLabel);
+  button.addEventListener("click", onClick);
+  return button;
+}
+
+function planAlert(title, text) {
+  const box = document.createElement("div");
+  box.className = "plan-alert";
+  const heading = document.createElement("strong");
+  heading.textContent = title;
+  const body = document.createElement("p");
+  body.textContent = text;
+  box.append(heading, body);
+  return box;
+}
+
+function alertTaskList(ids, describe, actionsFor) {
+  const items = document.createElement("div");
+  items.className = "plan-alert-items";
+  for (const id of ids) {
+    const task = state.tasks.find((t) => t.id === id);
+    if (!task) continue;
+    const row = document.createElement("div");
+    row.className = "plan-alert-item";
+    const label = document.createElement("span");
+    label.textContent = describe(task);
+    const actions = document.createElement("div");
+    actions.className = "plan-alert-actions";
+    actions.append(...actionsFor(task));
+    row.append(label, actions);
+    items.appendChild(row);
+  }
+  return items;
+}
+
+function renderPlanAlerts(today) {
+  const box = $("#planAlerts");
+  box.innerHTML = "";
+  const conflicts = Core.planConflicts(state, today);
+  const moveButton = (task) => makeButton("Move to tomorrow", "secondary-btn", () => deferTasks([task.id]), `Move "${task.title}" to tomorrow`);
+  const rescheduleButton = (task) => makeButton("Reschedule", "secondary-btn", () => openDialog({ task, focus: "#taskDate" }), `Reschedule "${task.title}"`);
+
+  if (conflicts.capacity) {
+    const c = conflicts.capacity;
+    const alert = planAlert(
+      `Over capacity by ${c.overBy} min`,
+      `Open work due today or overdue adds up to ${c.plannedMinutes} min, and you have ${c.minutesLeft} min left. Moving these lower-ranked tasks frees ${c.freedMinutes} min:`
+    );
+    alert.appendChild(alertTaskList(c.deferIds, (t) => `${t.title} · ${t.minutes} min`, (t) => [moveButton(t), rescheduleButton(t)]));
+    if (c.deferIds.length > 1) {
+      alert.appendChild(makeButton(`Move all ${c.deferIds.length} to tomorrow`, "primary-btn", () => deferTasks(c.deferIds)));
+    }
+    box.appendChild(alert);
+  }
+
+  if (conflicts.energy || nextUpFitsEnergyOnly) {
+    const e = conflicts.energy;
+    const alert = planAlert(
+      e ? `${e.demandingIds.length === 1 ? "1 task needs" : `${e.demandingIds.length} tasks need`} more than ${e.energy} energy` : "Showing lower-energy tasks",
+      e ? `${e.alternativeCount} task${e.alternativeCount === 1 ? " fits" : "s fit"} your energy and ${e.alternativeCount === 1 ? "is" : "are"} due by tomorrow.` : "Next up only shows tasks that fit your energy right now."
+    );
+    alert.appendChild(makeButton(
+      nextUpFitsEnergyOnly ? "Show all tasks" : "Show lower-energy tasks",
+      "secondary-btn",
+      () => { nextUpFitsEnergyOnly = !nextUpFitsEnergyOnly; renderNextUp(); }
+    ));
+    box.appendChild(alert);
+  }
+
+  if (conflicts.budget) {
+    const b = conflicts.budget;
+    const alert = planAlert(
+      `Plan is ${formatKES(b.overBy)} over budget`,
+      "Open task costs plus your savings target are more than this month's income. Review these, starting with the lowest-ranked:"
+    );
+    alert.appendChild(alertTaskList(b.costedIds, (t) => `${t.title} · ${formatKES(t.cost)}`, (t) => [
+      makeButton("Edit", "secondary-btn", () => openDialog({ task: t, focus: "#taskCost" }), `Edit cost of "${t.title}"`)
+    ]));
+    box.appendChild(alert);
+  }
+}
+
+function deferTasks(ids) {
+  const today = todayISO();
+  ids.forEach((id) => Core.deferTask(state, id, today));
+  save();
+  renderAll();
 }
 
 function updateCheckin() {
@@ -198,7 +298,7 @@ function deleteTask(id) {
   renderAll();
 }
 
-function openDialog({ task = null, category = null } = {}) {
+function openDialog({ task = null, category = null, focus = "#taskTitle" } = {}) {
   editingId = task ? task.id : null;
   $("#taskForm").reset();
   $("#dialogEyebrow").textContent = task ? "Edit action" : "New action";
@@ -216,7 +316,7 @@ function openDialog({ task = null, category = null } = {}) {
   renderGoalOptions(task ? task.goalId : null);
 
   $("#taskDialog").showModal();
-  setTimeout(() => $("#taskTitle").focus(), 0);
+  setTimeout(() => $(focus).focus(), 0);
 }
 
 function submitTask(event) {

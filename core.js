@@ -335,10 +335,10 @@
     return { task, score, reasons };
   }
 
-  function recommend(state, today = localDayISO(), limit = 3) {
+  function planContext(state, today) {
     const checkin = checkinFor(state, today);
     const money = financeSummary(state.money, state.tasks);
-    const ctx = {
+    return {
       today,
       tomorrow: addDays(today, 1),
       energy: checkin.energy,
@@ -346,11 +346,76 @@
       overBudget: money.income > 0 && money.available < 0 ? -money.available : 0,
       goals: new Map(state.goals.filter((g) => !g.archived).map((g) => [g.id, g]))
     };
+  }
+
+  function rankOpenTasks(state, ctx) {
     return state.tasks
       .filter((t) => !t.completed)
       .map((t) => scoreTask(t, ctx))
-      .sort((a, b) => b.score - a.score || smartSort(a.task, b.task))
+      .sort((a, b) => b.score - a.score || smartSort(a.task, b.task));
+  }
+
+  function fitsEnergy(task, energy) {
+    return ENERGY_RANK[task.energy] <= ENERGY_RANK[energy];
+  }
+
+  function recommend(state, today = localDayISO(), limit = 3, { fitsEnergyOnly = false } = {}) {
+    const ctx = planContext(state, today);
+    return rankOpenTasks(state, ctx)
+      .filter((r) => !fitsEnergyOnly || fitsEnergy(r.task, ctx.energy))
       .slice(0, limit);
+  }
+
+  function planConflicts(state, today = localDayISO()) {
+    const ctx = planContext(state, today);
+    const ranked = rankOpenTasks(state, ctx);
+    const dueNow = ranked.filter((r) => r.task.date <= today);
+    const result = { capacity: null, energy: null, budget: null };
+
+    const plannedMinutes = dueNow.reduce((sum, r) => sum + Number(r.task.minutes || 0), 0);
+    if (plannedMinutes > ctx.minutesLeft) {
+      const deferIds = [];
+      let remaining = plannedMinutes;
+      for (const r of [...dueNow].reverse()) {
+        if (remaining <= ctx.minutesLeft) break;
+        deferIds.push(r.task.id);
+        remaining -= Number(r.task.minutes || 0);
+      }
+      result.capacity = {
+        plannedMinutes,
+        minutesLeft: ctx.minutesLeft,
+        overBy: plannedMinutes - ctx.minutesLeft,
+        deferIds,
+        freedMinutes: plannedMinutes - remaining
+      };
+    }
+
+    const checkedIn = Boolean(state.checkin && state.checkin.date === today);
+    const tooDemanding = checkedIn ? dueNow.filter((r) => !fitsEnergy(r.task, ctx.energy)) : [];
+    if (tooDemanding.length) {
+      result.energy = {
+        energy: ctx.energy,
+        demandingIds: tooDemanding.map((r) => r.task.id),
+        alternativeCount: ranked.filter((r) => fitsEnergy(r.task, ctx.energy) && r.task.date <= ctx.tomorrow).length
+      };
+    }
+
+    if (ctx.overBudget > 0) {
+      const costed = ranked.filter((r) => Number(r.task.cost || 0) > 0);
+      result.budget = {
+        overBy: ctx.overBudget,
+        costedIds: [...costed].reverse().map((r) => r.task.id)
+      };
+    }
+
+    return result;
+  }
+
+  function deferTask(state, id, today = localDayISO()) {
+    const task = state.tasks.find((t) => t.id === id);
+    if (!task || task.completed) return null;
+    task.date = addDays(today, 1);
+    return task;
   }
 
   function calculateStreak(tasks, today = localDayISO()) {
@@ -393,6 +458,8 @@
     daySummary,
     minutesDoneToday,
     recommend,
+    planConflicts,
+    deferTask,
     financeSummary,
     calculateStreak
   };

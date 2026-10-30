@@ -324,6 +324,10 @@ MVP includes:
 - Up to three open tasks are recommended, ranked by deadline, priority, goal contribution, energy fit, time left today and budget.
 - Each recommendation lists the reasons that affected its rank, including negative ones.
 - The smart queue (FR-04) keeps its own order; Next up is a separate view of the same tasks.
+- When open work due today or overdue exceeds the time left, the product says by how much and offers to move the lowest-ranked tasks to tomorrow or reschedule them.
+- After the user checks in, work that needs more energy than they have is flagged, with an option to show only tasks that fit.
+- When planned costs and the savings target exceed income, costed tasks are listed for review.
+- Alert wording stays neutral ("over capacity", "over budget"), never failure-oriented.
 
 ---
 
